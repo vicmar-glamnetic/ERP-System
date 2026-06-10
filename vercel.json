@@ -1,5 +1,17 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "buildCommand": "npm install && cd web && npm install && npm run build",
+  "outputDirectory": "web/dist",
+  "rewrites": [
+    { "source": "/auth/:path*",      "destination": "/api/index" },
+    { "source": "/hris/:path*",      "destination": "/api/index" },
+    { "source": "/inventory/:path*", "destination": "/api/index" },
+    { "source": "/products/:path*",  "destination": "/api/index" },
+    { "source": "/warehouses/:path*","destination": "/api/index" },
+    { "source": "/wms/:path*",       "destination": "/api/index" },
+    { "source": "/tms/:path*",       "destination": "/api/index" },
+    { "source": "/finance/:path*",   "destination": "/api/index" },
+    { "source": "/(.*)",             "destination": "/index.html" }
+  ],
   "functions": {
     "api/index.ts": {
       "memory": 1024,

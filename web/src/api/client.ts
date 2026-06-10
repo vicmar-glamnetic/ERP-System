@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+// Local dev: http://localhost:3000  |  Production (Vercel): '' (same domain)
 export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export const api = axios.create({
