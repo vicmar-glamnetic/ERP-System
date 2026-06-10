@@ -63,19 +63,21 @@ export async function createRoute(body: CreateRouteBody, createdBy: string): Pro
 
     await client.query('COMMIT');
 
-    // Non-blocking push notification to driver
-    const { rows: [driver] } = await pool.query(
-      `SELECT push_token, full_name FROM users WHERE id = $1`,
-      [driver_id]
-    );
-    if (driver?.push_token) {
-      void sendPushNotification(
-        driver.push_token as string,
-        'Route Assigned',
-        `You have a new delivery route for ${route_date}. ${stops.length} stop(s).`,
-        { route_id: route.id as string }
+    // Non-blocking push notification to driver (best-effort, push_token may not exist)
+    try {
+      const { rows: [driver] } = await pool.query(
+        `SELECT full_name, push_token FROM users WHERE id = $1`,
+        [driver_id]
       );
-    }
+      if (driver?.push_token) {
+        void sendPushNotification(
+          driver.push_token as string,
+          'Route Assigned',
+          `You have a new delivery route for ${route_date}. ${stops.length} stop(s).`,
+          { route_id: route.id as string }
+        );
+      }
+    } catch (_) { /* push_token column may not exist in all environments */ }
 
     return { ...(route as RouteRow), stops: insertedStops };
   } catch (err) {
@@ -609,7 +611,9 @@ export async function getFuelLogs(filters: {
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
 export async function savePushToken(userId: string, token: string): Promise<void> {
-  await pool.query(`UPDATE users SET push_token = $1 WHERE id = $2`, [token, userId]);
+  try {
+    await pool.query(`UPDATE users SET push_token = $1 WHERE id = $2`, [token, userId]);
+  } catch (_) { /* push_token column may not exist in all environments */ }
 }
 
 export async function sendPushNotification(
