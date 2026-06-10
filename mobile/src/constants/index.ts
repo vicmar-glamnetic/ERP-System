@@ -1,5 +1,4 @@
-// Replace with your Render backend URL after deploying
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://erp-system-xxxx.onrender.com';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://erp-system-eight-ruby.vercel.app';
 
 export const COLORS = {
   primary: '#0F6E56',
