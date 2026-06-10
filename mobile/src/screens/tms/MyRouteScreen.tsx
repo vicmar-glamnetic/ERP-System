@@ -64,11 +64,26 @@ export function MyRouteScreen() {
       return;
     }
 
+    const servicesEnabled = await Location.hasServicesEnabledAsync();
+    if (!servicesEnabled) {
+      Alert.alert(
+        'Turn On Device Location',
+        'Your phone\'s GPS/Location is turned off. Pull down the notification bar and tap the Location icon (or go to Settings → Location) to turn it on, then come back and tap Start Route again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setGpsActive(true);
     setGpsError(null);
 
     const sendPing = async () => {
       try {
+        const enabled = await Location.hasServicesEnabledAsync();
+        if (!enabled) {
+          setGpsError('Device GPS is OFF — turn on Location in Settings');
+          return;
+        }
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         await pingGPS(
           routeId,
