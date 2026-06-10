@@ -35,7 +35,7 @@ export interface CreateSOBody {
 
 export interface AssignPickTaskBody {
   so_id: string;
-  assigned_to: string;
+  assigned_to: string | null;
 }
 
 export interface ConfirmPickBody {

@@ -399,7 +399,7 @@ export async function getSOById(id: string) {
 
 // ─── Pick Tasks ───────────────────────────────────────────────────────────────
 
-export async function generatePickTasks(soId: string, assignedTo: string) {
+export async function generatePickTasks(soId: string, assignedTo: string | null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

@@ -79,7 +79,7 @@ function GeneratePickTasksModal({ so, open, onClose }: { so: SalesOrder | null; 
   const { data: employees } = useQuery({ queryKey: ['employees-wms'], queryFn: () => hrisApi.employees({ role: 'wh_operator', limit: '50' }) });
 
   const mut = useMutation({
-    mutationFn: () => wmsApi.generatePickTasks(so!.id, assignedTo),
+    mutationFn: () => wmsApi.generatePickTasks(so!.id, assignedTo || null),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sos'] }); onClose(); setErr(''); },
     onError: (e) => setErr(apiError(e)),
   });
@@ -87,15 +87,20 @@ function GeneratePickTasksModal({ so, open, onClose }: { so: SalesOrder | null; 
   return (
     <Modal open={open} onClose={onClose} title={`Generate Pick Tasks — ${so?.so_number}`}>
       {err && <Alert type="error" message={err} />}
-      <Field label="Assign to operator">
+      <Field label="Assign to operator (optional)">
         <Select value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
-          <option value="">— Select operator —</option>
+          <option value="">— Unassigned —</option>
           {(employees?.data ?? []).map(e => <option key={e.id} value={e.id}>{e.employee_code} — {e.full_name}</option>)}
         </Select>
       </Field>
+      {(employees?.data?.length ?? 0) === 0 && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+          No warehouse operators found. You can generate tasks unassigned and assign them later via HRIS.
+        </p>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
         <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn loading={mut.isPending} disabled={!assignedTo} onClick={() => mut.mutate()}>Generate</Btn>
+        <Btn loading={mut.isPending} onClick={() => mut.mutate()}>Generate</Btn>
       </div>
     </Modal>
   );

@@ -59,7 +59,7 @@ export const wmsApi = {
   createSO: (body: unknown) => api.post('/wms/sales-orders', body).then((r) => r.data.data),
 
   // Pick tasks
-  generatePickTasks: (so_id: string, assigned_to: string) =>
+  generatePickTasks: (so_id: string, assigned_to: string | null) =>
     api.post('/wms/pick-tasks/generate', { so_id, assigned_to }).then((r) => r.data.data),
 
   // Check tasks
