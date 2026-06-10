@@ -83,6 +83,81 @@ function CreateEmployeeModal({ open, onClose }: { open: boolean; onClose: () => 
   );
 }
 
+function EditEmployeeModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    full_name: employee.full_name,
+    email: employee.email ?? '',
+    role: employee.role,
+    department: employee.department ?? '',
+    status: employee.status,
+  });
+  const [newPassword, setNewPassword] = useState('');
+  const [err, setErr] = useState('');
+  const [pwErr, setPwErr] = useState('');
+  const [pwSuccess, setPwSuccess] = useState(false);
+
+  const set = (k: string) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const updateMut = useMutation({
+    mutationFn: () => hrisApi.updateEmployee(employee.id, form),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['employees'] }); onClose(); },
+    onError: (e) => setErr(apiError(e)),
+  });
+
+  const pwMut = useMutation({
+    mutationFn: () => hrisApi.changePassword(employee.id, newPassword),
+    onSuccess: () => { setPwSuccess(true); setNewPassword(''); setPwErr(''); },
+    onError: (e) => setPwErr(apiError(e)),
+  });
+
+  return (
+    <Modal open onClose={onClose} title={`Edit — ${employee.employee_code} ${employee.full_name}`} width={520}>
+      {err && <Alert type="error" message={err} />}
+      <Field label="Full Name">
+        <Input value={form.full_name} onChange={set('full_name')} />
+      </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <Field label="Email">
+          <Input type="email" value={form.email} onChange={set('email')} />
+        </Field>
+        <Field label="Role">
+          <Select value={form.role} onChange={set('role')}>
+            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+          </Select>
+        </Field>
+        <Field label="Department">
+          <Input value={form.department} onChange={set('department')} />
+        </Field>
+        <Field label="Status">
+          <Select value={form.status} onChange={set('status')}>
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </Select>
+        </Field>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn loading={updateMut.isPending} onClick={() => updateMut.mutate()}>Save Changes</Btn>
+      </div>
+
+      <hr style={{ margin: '20px 0', borderColor: 'var(--border)' }} />
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Reset Password</div>
+      {pwErr && <Alert type="error" message={pwErr} />}
+      {pwSuccess && <Alert type="success" message="Password updated successfully." />}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <Field label="New Password">
+            <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" />
+          </Field>
+        </div>
+        <Btn loading={pwMut.isPending} disabled={!newPassword} onClick={() => pwMut.mutate()}>Reset</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 function LoginHistoryModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ['login-logs', employee.id],
@@ -122,6 +197,7 @@ export function EmployeesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [editTarget, setEditTarget] = useState<Employee | null>(null);
   const [loginTarget, setLoginTarget] = useState<Employee | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
@@ -152,6 +228,15 @@ export function EmployeesPage() {
         )
         : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Never</span>,
     },
+    {
+      key: 'actions', label: '',
+      render: (r: Employee) => (
+        <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+          <Btn size="sm" onClick={() => setEditTarget(r)}>Edit</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => setLoginTarget(r)}><Clock size={12} /></Btn>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -175,9 +260,10 @@ export function EmployeesPage() {
       <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
         {isLoading
           ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
-          : <Table cols={cols} rows={data?.data ?? []} onRow={r => setLoginTarget(r)} />}
+          : <Table cols={cols} rows={data?.data ?? []} />}
       </div>
       <CreateEmployeeModal open={showCreate} onClose={() => setShowCreate(false)} />
+      {editTarget && <EditEmployeeModal employee={editTarget} onClose={() => setEditTarget(null)} />}
       {loginTarget && <LoginHistoryModal employee={loginTarget} onClose={() => setLoginTarget(null)} />}
     </div>
   );
