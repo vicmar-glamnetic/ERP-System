@@ -154,14 +154,13 @@ export async function getRouteById(id: string): Promise<RouteWithStops | null> {
 }
 
 export async function getMyRoute(driverId: string): Promise<RouteWithStops | null> {
-  const today = new Date().toISOString().split('T')[0];
   const { rows: [route] } = await pool.query(
     `SELECT r.*, v.plate_number, v.type AS vehicle_type
      FROM routes r
      JOIN vehicles v ON v.id = r.vehicle_id
-     WHERE r.driver_id = $1 AND r.route_date = $2
-     ORDER BY r.created_at DESC LIMIT 1`,
-    [driverId, today]
+     WHERE r.driver_id = $1 AND r.status IN ('pending', 'in_progress')
+     ORDER BY r.route_date ASC, r.created_at DESC LIMIT 1`,
+    [driverId]
   );
   if (!route) return null;
 

@@ -8,7 +8,10 @@ import type { Route, DeliveryStop } from '../../types';
 
 function CreateRouteModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
-  const [routeDate, setRouteDate] = useState(new Date().toISOString().split('T')[0]);
+  const [routeDate, setRouteDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [vehicleId, setVehicleId] = useState('');
   const [driverId, setDriverId] = useState('');
   const [stops, setStops] = useState([{ stop_sequence: 1, address: '', recipient_name: '', recipient_phone: '' }]);

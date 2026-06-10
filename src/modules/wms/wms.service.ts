@@ -204,14 +204,40 @@ export async function receiveStock(body: ReceiveStockBody, receivedBy: string) {
 
     // Check if all lines fully received → update PO status
     const { rows: allLines } = await client.query(
-      `SELECT qty_ordered, qty_received FROM po_lines WHERE po_id = $1`,
+      `SELECT qty_ordered, qty_received, unit_cost FROM po_lines WHERE po_id = $1`,
       [line.purchase_order_id]
     );
     const allDone = allLines.every(l => toFloat(l.qty_received) >= toFloat(l.qty_ordered));
+    const newPoStatus = allDone ? 'received' : 'receiving';
     await client.query(
       `UPDATE purchase_orders SET status = $1, updated_at = NOW() WHERE id = $2`,
-      [allDone ? 'received' : 'receiving', line.purchase_order_id]
+      [newPoStatus, line.purchase_order_id]
     );
+
+    // Auto-create draft AP invoice when PO is fully received (once only)
+    if (allDone) {
+      const { rows: [existing] } = await client.query(
+        `SELECT id FROM supplier_invoices WHERE po_id = $1 LIMIT 1`,
+        [line.purchase_order_id]
+      );
+      if (!existing) {
+        const total = allLines.reduce(
+          (sum, l) => sum + toFloat(l.qty_ordered) * toFloat(l.unit_cost), 0
+        );
+        const { rows: [po] } = await client.query(
+          `SELECT po_number, supplier_name FROM purchase_orders WHERE id = $1`,
+          [line.purchase_order_id]
+        );
+        const { rows: [{ ct }] } = await client.query(`SELECT COUNT(*) AS ct FROM supplier_invoices`);
+        const invNumber = `AP-${new Date().getFullYear()}-${String(parseInt(ct) + 1).padStart(4, '0')}`;
+        await client.query(
+          `INSERT INTO supplier_invoices
+             (inv_number, po_id, supplier_name, total_amount, balance_due, due_date, payment_status, created_by)
+           VALUES ($1, $2, $3, $4, $4, NOW() + INTERVAL '30 days', 'unpaid', $5)`,
+          [invNumber, line.purchase_order_id, po.supplier_name, total.toFixed(2), receivedBy]
+        );
+      }
+    }
 
     await client.query('COMMIT');
     return grn;
@@ -597,7 +623,7 @@ export async function generatePutawayTasks(
 ) {
   // Validate assignee role
   const { rows: [emp] } = await pool.query(
-    `SELECT id, role FROM users WHERE id = $1 AND is_active = true`,
+    `SELECT id, role FROM users WHERE id = $1 AND status = 'active'`,
     [assigned_to]
   );
   if (!emp) throw new ServiceError('NOT_FOUND', 'Assigned employee not found', 404);
@@ -638,7 +664,7 @@ export async function generatePutawayTasks(
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
        RETURNING *`,
       [
-        grn_log_id, grn.product_id, grn.qty_received,
+        grn_log_id, grn.product_id, Math.round(parseFloat(grn.qty_received)),
         grn.bin_id, grn.warehouse_id,
         grn.lot_number ?? null, assigned_to, created_by,
       ]

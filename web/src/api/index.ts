@@ -67,6 +67,10 @@ export const wmsApi = {
     api.get('/wms/check-tasks', { params }).then((r) => r.data.data),
   generateCheckTasks: (so_id: string, assigned_to?: string) =>
     api.post('/wms/check-tasks/generate', { so_id, assigned_to }).then((r) => r.data.data),
+  confirmCheckTask: (check_task_id: string, qty_checked: number) =>
+    api.post('/wms/check-tasks/confirm', { check_task_id, qty_checked }).then((r) => r.data.data),
+  failCheckTask: (check_task_id: string, notes: string) =>
+    api.post('/wms/check-tasks/fail', { check_task_id, notes }).then((r) => r.data.data),
 
   // Invoices
   invoices: (params?: Record<string, string>): Promise<SalesInvoice[]> =>

@@ -189,7 +189,7 @@ export async function recordAPPayment(body: RecordAPPaymentBody, createdBy: stri
       `INSERT INTO ap_payments
          (supplier_invoice_id, amount, payment_date, payment_method, reference_no, notes, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [body.supplier_invoice_id, body.amount, body.payment_date,
+      [body.supplier_invoice_id, body.amount, body.payment_date ?? new Date(),
        body.payment_method ?? null, body.reference_no ?? null, body.notes ?? null, createdBy]
     );
 
@@ -336,7 +336,7 @@ export async function recordARPayment(body: RecordARPaymentBody, createdBy: stri
       `INSERT INTO ar_payments
          (si_id, amount, payment_date, payment_method, reference_no, notes, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [body.si_id, body.amount, body.payment_date,
+      [body.si_id, body.amount, body.payment_date ?? new Date(),
        body.payment_method ?? null, body.reference_no ?? null, body.notes ?? null, createdBy]
     );
 

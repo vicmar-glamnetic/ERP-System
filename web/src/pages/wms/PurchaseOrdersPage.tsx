@@ -4,7 +4,7 @@ import { Plus, RefreshCw, Package, ClipboardList } from 'lucide-react';
 import { wmsApi, inventoryApi, hrisApi } from '../../api';
 import { Table, Badge, Btn, PageHeader, Modal, Field, Input, Select, Alert, Spinner } from '../../components/ui';
 import { apiError } from '../../api/client';
-import type { PurchaseOrder, GRNLog, PutawayTask } from '../../types';
+import type { PurchaseOrder, POLine, GRNLog, PutawayTask } from '../../types';
 
 // ── Create PO Modal ───────────────────────────────────────────────────────────
 
@@ -59,6 +59,136 @@ function CreatePOModal({ open, onClose }: { open: boolean; onClose: () => void }
         <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
         <Btn loading={mut.isPending} onClick={() => mut.mutate()}>Create PO</Btn>
       </div>
+    </Modal>
+  );
+}
+
+// ── PO Detail Modal (view lines + receive stock) ──────────────────────────────
+
+function PODetailModal({ po, open, onClose }: { po: PurchaseOrder; open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [receiving, setReceiving] = useState<string | null>(null); // po_line_id being received
+  const [recvForm, setRecvForm] = useState({ qty: '', bin_id: '' });
+  const [err, setErr] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const { data: poDetail, isLoading } = useQuery({
+    queryKey: ['po-detail', po.id],
+    queryFn: () => wmsApi.po(po.id),
+    enabled: open,
+  });
+
+  const { data: warehouses } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: () => inventoryApi.warehouses(),
+    enabled: open,
+  });
+
+  const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const warehouseId = selectedWarehouse || warehouses?.[0]?.id || '';
+
+  const { data: bins } = useQuery({
+    queryKey: ['bins', warehouseId],
+    queryFn: () => inventoryApi.warehouseBins(warehouseId),
+    enabled: !!warehouseId,
+  });
+
+  const stagingBins = (bins ?? []).filter((b: any) => b.type === 'staging');
+
+  const recvMut = useMutation({
+    mutationFn: () => wmsApi.receiveStock({
+      po_line_id: receiving!,
+      bin_id: recvForm.bin_id,
+      qty_received: parseFloat(recvForm.qty),
+    }),
+    onSuccess: () => {
+      setSuccess('Stock received successfully.');
+      setReceiving(null);
+      setRecvForm({ qty: '', bin_id: '' });
+      setErr('');
+      qc.invalidateQueries({ queryKey: ['po-detail', po.id] });
+      qc.invalidateQueries({ queryKey: ['pos'] });
+    },
+    onError: (e) => setErr(apiError(e)),
+  });
+
+  const canReceive = ['pending', 'receiving'].includes(po.status);
+
+  return (
+    <Modal open={open} onClose={() => { setReceiving(null); setErr(''); setSuccess(''); onClose(); }} title={`PO — ${po.po_number}`} width={600}>
+      {/* PO Header */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        <div><div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Supplier</div><div style={{ fontWeight: 600 }}>{po.supplier_name}</div></div>
+        <div><div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Status</div><Badge status={po.status} /></div>
+        <div><div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Expected</div><div>{po.expected_date ? new Date(po.expected_date).toLocaleDateString('en-PH') : '—'}</div></div>
+      </div>
+
+      {err && <Alert type="error" message={err} />}
+      {success && <Alert type="success" message={success} />}
+
+      {/* PO Lines */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>
+        Line Items
+      </div>
+
+      {isLoading ? <Spinner /> : (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+          {(poDetail?.lines ?? []).map((line: POLine, i: number) => {
+            const pct = line.qty_ordered > 0 ? Math.min(100, Math.round((line.qty_received / line.qty_ordered) * 100)) : 0;
+            const isOpen = receiving === line.id;
+            return (
+              <div key={line.id} style={{ borderBottom: i < (poDetail?.lines?.length ?? 1) - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{line.sku} — {(line as any).product_name ?? line.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Ordered: <strong>{line.qty_ordered}</strong> · Received: <strong style={{ color: line.qty_received >= line.qty_ordered ? '#16a34a' : 'inherit' }}>{line.qty_received ?? 0}</strong>
+                      <span style={{ marginLeft: 8, color: '#94a3b8' }}>({pct}%)</span>
+                    </div>
+                    <div style={{ height: 4, background: '#e2e8f0', borderRadius: 2, marginTop: 6, width: 120 }}>
+                      <div style={{ height: 4, background: pct >= 100 ? '#16a34a' : '#3b82f6', borderRadius: 2, width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  {canReceive && (line.qty_received ?? 0) < line.qty_ordered && (
+                    <Btn size="sm" variant={isOpen ? 'ghost' : 'secondary'} onClick={() => { setReceiving(isOpen ? null : line.id); setRecvForm({ qty: String(line.qty_ordered - (line.qty_received ?? 0)), bin_id: '' }); setErr(''); }}>
+                      {isOpen ? 'Cancel' : 'Receive'}
+                    </Btn>
+                  )}
+                </div>
+
+                {isOpen && (
+                  <div style={{ background: '#f8fafc', borderTop: '1px solid var(--border)', padding: '12px 14px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: 10, alignItems: 'end' }}>
+                      <Field label="Qty">
+                        <Input type="number" min={1} max={line.qty_ordered - (line.qty_received ?? 0)} value={recvForm.qty}
+                          onChange={e => setRecvForm(f => ({ ...f, qty: e.target.value }))} />
+                      </Field>
+                      <Field label="Warehouse">
+                        <Select value={selectedWarehouse} onChange={e => { setSelectedWarehouse(e.target.value); setRecvForm(f => ({ ...f, bin_id: '' })); }}>
+                          {(warehouses ?? []).map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="Staging Bin">
+                        <Select value={recvForm.bin_id} onChange={e => setRecvForm(f => ({ ...f, bin_id: e.target.value }))}>
+                          <option value="">— Select bin —</option>
+                          {stagingBins.map((b: any) => (
+                            <option key={b.id} value={b.id}>{b.aisle}-{b.bay}-{b.level}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                      <Btn loading={recvMut.isPending} disabled={!recvForm.qty || !recvForm.bin_id} onClick={() => recvMut.mutate()}>
+                        Confirm Receive
+                      </Btn>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Modal>
   );
 }
@@ -243,6 +373,7 @@ function PutawayTasksSection() {
 export function PurchaseOrdersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [putawayPO, setPutawayPO] = useState<PurchaseOrder | null>(null);
+  const [detailPO, setDetailPO] = useState<PurchaseOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['pos', statusFilter],
@@ -288,12 +419,15 @@ export function PurchaseOrdersPage() {
       <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
         {isLoading
           ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
-          : <Table cols={cols} rows={data?.data ?? []} />}
+          : <Table cols={cols} rows={data?.data ?? []} onRow={row => setDetailPO(row)} />}
       </div>
 
       <PutawayTasksSection />
 
       <CreatePOModal open={showCreate} onClose={() => setShowCreate(false)} />
+      {detailPO && (
+        <PODetailModal po={detailPO} open={!!detailPO} onClose={() => setDetailPO(null)} />
+      )}
       {putawayPO && (
         <GeneratePutawayModal
           po={putawayPO}

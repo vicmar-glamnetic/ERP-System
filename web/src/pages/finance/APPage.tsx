@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, RefreshCw, DollarSign } from 'lucide-react';
@@ -75,6 +75,10 @@ function RecordPaymentModal({ inv, open, onClose }: { inv: SupplierInvoice | nul
   const qc = useQueryClient();
   const [form, setForm] = useState({ amount: '', payment_method: 'bank_transfer', reference_no: '', notes: '' });
   const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (open && inv?.balance_due) setForm(f => ({ ...f, amount: String(inv.balance_due) }));
+  }, [open, inv?.id]);
 
   const mut = useMutation({
     mutationFn: () => financeApi.recordAPPayment({
@@ -194,6 +198,7 @@ export function APPage() {
   const cols = [
     { key: 'inv_number', label: 'Invoice #', render: (r: SupplierInvoice) => <strong>{r.inv_number}</strong> },
     { key: 'supplier_name', label: 'Supplier' },
+    { key: 'po_number', label: 'PO #', render: (r: SupplierInvoice) => (r as any).po_number ? <span style={{ color: 'var(--primary)', fontSize: 12 }}>{(r as any).po_number}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span> },
     { key: 'total_amount', label: 'Total', render: (r: SupplierInvoice) => fmt(r.total_amount) },
     { key: 'amount_paid', label: 'Paid', render: (r: SupplierInvoice) => fmt(r.amount_paid) },
     { key: 'balance_due', label: 'Balance', render: (r: SupplierInvoice) => <strong style={{ color: r.balance_due > 0 ? 'var(--danger)' : 'var(--success)' }}>{fmt(r.balance_due)}</strong> },

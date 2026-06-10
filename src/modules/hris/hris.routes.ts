@@ -8,7 +8,7 @@ const router = Router();
 router.get(
   '/employees',
   authGuard,
-  requireRole('system_admin', 'operations_manager', 'hr_manager', 'hr_staff'),
+  requireRole('system_admin', 'operations_manager', 'hr_manager', 'hr_staff', 'dispatcher'),
   HrisController.getAllEmployees
 );
 
