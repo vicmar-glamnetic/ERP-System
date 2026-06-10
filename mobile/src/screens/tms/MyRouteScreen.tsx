@@ -77,6 +77,18 @@ export function MyRouteScreen() {
     setGpsActive(true);
     setGpsError(null);
 
+    const getLocation = (): Promise<Location.LocationObject> =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('GPS timeout after 20s')), 20000);
+        Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 500, distanceInterval: 0 },
+          (loc) => { clearTimeout(timer); resolve(loc); }
+        ).then(sub => {
+          // Remove subscription after first fix is resolved
+          Promise.resolve().then(() => sub.remove());
+        }).catch(reject);
+      });
+
     const sendPing = async () => {
       try {
         const enabled = await Location.hasServicesEnabledAsync();
@@ -84,10 +96,7 @@ export function MyRouteScreen() {
           setGpsError('Device GPS is OFF — turn on Location in Settings');
           return;
         }
-        let loc = await Location.getLastKnownPositionAsync({ maxAge: 60000, requiredAccuracy: 500 });
-        if (!loc) {
-          loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        }
+        const loc = await getLocation();
         await pingGPS(
           routeId,
           loc.coords.latitude,
