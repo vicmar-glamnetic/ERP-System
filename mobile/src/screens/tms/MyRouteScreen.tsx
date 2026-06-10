@@ -84,7 +84,10 @@ export function MyRouteScreen() {
           setGpsError('Device GPS is OFF — turn on Location in Settings');
           return;
         }
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        let loc = await Location.getLastKnownPositionAsync({ maxAge: 60000, requiredAccuracy: 500 });
+        if (!loc) {
+          loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }
         await pingGPS(
           routeId,
           loc.coords.latitude,
