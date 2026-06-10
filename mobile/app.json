@@ -18,24 +18,49 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "POST_NOTIFICATIONS"
-      ]
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.erp.system"
     },
     "plugins": [
-      ["expo-camera", { "cameraPermission": "Allow ERP Mobile to access your camera for scanning and POD photos." }],
-      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow ERP Mobile to use your GPS for route tracking." }],
-      ["expo-image-picker", { "cameraPermission": "Allow ERP Mobile to take POD photos." }],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ERP Mobile to access your camera for scanning and POD photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow ERP Mobile to use your GPS for route tracking."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow ERP Mobile to take POD photos."
+        }
+      ],
       "expo-notifications"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "83b811f0-f2a2-4a91-a505-96a02b7b33f8"
+      }
     }
   }
 }
