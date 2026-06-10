@@ -127,6 +127,21 @@ export async function listFuelLogs(req: Request, res: Response, next: NextFuncti
   } catch (err) { handleError(err, res, next); }
 }
 
+export async function listMyRoutes(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const status = req.query['status'] as string | undefined;
+    const result = await TmsService.getMyRoutes(req.user!.userId, status);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function listMyFuelLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await TmsService.getMyFuelLogs(req.user!.userId);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
 // ─── Push Token ───────────────────────────────────────────────────────────────
 
 export async function savePushToken(req: Request, res: Response, next: NextFunction): Promise<void> {

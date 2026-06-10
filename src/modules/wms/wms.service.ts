@@ -267,8 +267,8 @@ export async function createSO(body: CreateSOBody, createdBy: string) {
     const lines = [];
     for (const line of body.lines) {
       const { rows: [soLine] } = await client.query(
-        `INSERT INTO so_lines (so_id, product_id, qty_ordered) VALUES ($1, $2, $3) RETURNING *`,
-        [so.id, line.product_id, line.qty_ordered]
+        `INSERT INTO so_lines (so_id, product_id, qty_ordered, unit_price) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [so.id, line.product_id, line.qty_ordered, line.unit_price ?? 0]
       );
       lines.push(soLine);
 
@@ -495,28 +495,78 @@ export async function confirmPick(body: ConfirmPickBody, employeeId: string) {
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
-export async function dispatchSO(body: DispatchBody, _dispatchedBy: string) {
-  const { rows } = await pool.query(
-    `UPDATE sales_orders SET status = 'dispatched', updated_at = NOW()
-     WHERE id = $1 AND status IN ('invoiced', 'packed')
-     RETURNING *`,
-    [body.so_id]
-  );
+export async function dispatchSO(body: DispatchBody, dispatchedBy: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (!rows[0]) {
-    const { rows: check } = await pool.query(
-      `SELECT status FROM sales_orders WHERE id = $1`,
+    const { rows: [so] } = await client.query(
+      `SELECT * FROM sales_orders WHERE id = $1 FOR UPDATE`,
       [body.so_id]
     );
-    if (!check[0]) throw new ServiceError('NOT_FOUND', 'Sales order not found', 404);
-    throw new ServiceError(
-      'INVALID_STATUS',
-      `SO must be 'invoiced' to dispatch. Current: ${check[0].status as string}`,
-      400
-    );
-  }
+    if (!so) throw new ServiceError('NOT_FOUND', 'Sales order not found', 404);
 
-  return rows[0];
+    const dispatchable = ['checked', 'invoiced', 'packed', 'ready_to_dispatch'];
+    if (!dispatchable.includes(so.status as string)) {
+      throw new ServiceError('INVALID_STATUS', `SO cannot be dispatched from status '${so.status as string}'`, 400);
+    }
+
+    // Auto-generate invoice if one doesn't exist yet
+    const { rows: existingInv } = await client.query(
+      `SELECT id FROM sales_invoices WHERE so_id = $1`, [body.so_id]
+    );
+    if (existingInv.length === 0) {
+      const year = new Date().getFullYear();
+      const { rows: [{ count }] } = await client.query(
+        `SELECT COUNT(*) FROM sales_invoices WHERE si_number LIKE $1`, [`SI-${year}-%`]
+      );
+      const siNumber = `SI-${year}-${String(parseInt(count as string) + 1).padStart(3, '0')}`;
+
+      const { rows: [invoice] } = await client.query(
+        `INSERT INTO sales_invoices (si_number, so_id, customer_name, status, issued_at, created_by)
+         VALUES ($1, $2, $3, 'issued', NOW(), $4) RETURNING *`,
+        [siNumber, body.so_id, so.customer_name, dispatchedBy]
+      );
+
+      const { rows: soLines } = await client.query(
+        `SELECT sol.product_id, sol.qty_ordered, sol.unit_price,
+                p.sku, p.name, p.uom, p.unit_price AS catalog_price
+         FROM so_lines sol JOIN products p ON sol.product_id = p.id
+         WHERE sol.so_id = $1`,
+        [body.so_id]
+      );
+
+      let total = 0;
+      for (const line of soLines) {
+        const unitPrice = toFloat(line.unit_price) > 0 ? toFloat(line.unit_price) : toFloat(line.catalog_price);
+        const lineTotal = unitPrice * toFloat(line.qty_ordered);
+        total += lineTotal;
+        await client.query(
+          `INSERT INTO si_lines (si_id, product_id, product_sku, product_name, uom, qty, unit_price, line_total)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [invoice.id, line.product_id, line.sku, line.name, line.uom, Math.round(toFloat(line.qty_ordered)), unitPrice, lineTotal]
+        );
+      }
+
+      await client.query(
+        `UPDATE sales_invoices SET total_amount = $1, balance_due = $1, payment_status = 'unpaid' WHERE id = $2`,
+        [total, invoice.id]
+      );
+    }
+
+    const { rows: [dispatched] } = await client.query(
+      `UPDATE sales_orders SET status = 'dispatched', updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [body.so_id]
+    );
+
+    await client.query('COMMIT');
+    return dispatched;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Putaway ──────────────────────────────────────────────────────────────────
@@ -604,6 +654,80 @@ export async function completePutaway(body: CompletePutawayBody, userId: string)
        SET status = 'completed', completed_by = $1, completed_at = NOW()
        WHERE id = $2 RETURNING *`,
       [userId, body.putaway_task_id]
+    );
+
+    await client.query('COMMIT');
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getPendingPutaway(userId: string) {
+  const { rows } = await pool.query(
+    `SELECT pt.id AS grn_log_id,
+            p.sku AS product_sku, p.name AS product_name,
+            gl.qty_received::float AS qty_received,
+            gl.lot_number, pt.status AS current_status,
+            pt.from_bin_id
+     FROM putaway_tasks pt
+     JOIN grn_logs gl ON gl.id = pt.grn_log_id
+     JOIN products p  ON p.id  = gl.product_id
+     WHERE pt.status = 'pending' AND pt.assigned_to = $1
+     ORDER BY pt.created_at`,
+    [userId]
+  );
+  return rows;
+}
+
+export async function confirmPutawayFreeForm(
+  body: { grn_log_id: string; bin_id: string },
+  userId: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: [task] } = await client.query(
+      `SELECT pt.*, gl.lot_number
+       FROM putaway_tasks pt
+       JOIN grn_logs gl ON gl.id = pt.grn_log_id
+       WHERE pt.id = $1 FOR UPDATE`,
+      [body.grn_log_id]
+    );
+    if (!task) throw new ServiceError('NOT_FOUND', 'Putaway task not found', 404);
+    if (task.status === 'completed') throw new ServiceError('INVALID_STATUS', 'Task already completed', 409);
+
+    // Move inventory: reduce from staging bin, add to chosen bin
+    await client.query(
+      `UPDATE inventory SET qty_on_hand = qty_on_hand - $1, updated_at = NOW()
+       WHERE product_id = $2 AND bin_id = $3 AND lot_number IS NOT DISTINCT FROM $4`,
+      [task.qty, task.product_id, task.from_bin_id, task.lot_number ?? null]
+    );
+
+    const { rows: existing } = await client.query(
+      `SELECT qty_on_hand FROM inventory
+       WHERE product_id = $1 AND bin_id = $2 AND lot_number IS NOT DISTINCT FROM $3 FOR UPDATE`,
+      [task.product_id, body.bin_id, task.lot_number ?? null]
+    );
+    const newQty = toFloat(existing[0]?.qty_on_hand) + toFloat(task.qty);
+
+    await client.query(
+      `INSERT INTO inventory (product_id, bin_id, qty_on_hand, lot_number, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT ON CONSTRAINT inventory_unique
+       DO UPDATE SET qty_on_hand = $3, updated_at = NOW()`,
+      [task.product_id, body.bin_id, newQty, task.lot_number ?? null]
+    );
+
+    const { rows: [updated] } = await client.query(
+      `UPDATE putaway_tasks
+       SET status = 'completed', completed_by = $1, completed_at = NOW(), to_bin_id = $2
+       WHERE id = $3 RETURNING *`,
+      [userId, body.bin_id, body.grn_log_id]
     );
 
     await client.query('COMMIT');
@@ -786,6 +910,85 @@ export async function failCheckTask(body: FailCheckBody, userId: string) {
     throw new ServiceError('INVALID_STATUS', 'Task already processed', 409);
   }
   return task;
+}
+
+export async function getCheckTasksGrouped(userId: string) {
+  const { rows } = await pool.query(
+    `SELECT
+       so.id,
+       so.so_number,
+       so.customer_name,
+       so.required_date,
+       CASE
+         WHEN COUNT(*) FILTER (WHERE ct.status = 'pending') > 0 THEN 'pending'
+         WHEN COUNT(*) FILTER (WHERE ct.status = 'failed')  > 0 THEN 'failed'
+         ELSE 'passed'
+       END AS status,
+       COALESCE(
+         json_agg(json_build_object(
+           'id',           ct.id,
+           'product_sku',  p.sku,
+           'product_name', p.name,
+           'qty_ordered',  COALESCE(sol.qty_ordered, ct.qty_expected),
+           'qty_picked',   ct.qty_expected
+         ) ORDER BY ct.created_at),
+         '[]'::json
+       ) AS lines,
+       MAX(ct.notes) AS notes
+     FROM check_tasks ct
+     JOIN sales_orders so ON so.id = ct.so_id
+     JOIN products p      ON p.id  = ct.product_id
+     LEFT JOIN so_lines sol ON sol.id = ct.so_line_id
+     WHERE ct.assigned_to = $1
+     GROUP BY so.id, so.so_number, so.customer_name, so.required_date
+     ORDER BY MAX(ct.created_at) DESC`,
+    [userId]
+  );
+  return rows;
+}
+
+export async function completeSOCheckTasks(
+  soId: string,
+  passed: boolean,
+  notes: string | undefined,
+  userId: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: tasks } = await client.query(
+      `SELECT id FROM check_tasks WHERE so_id = $1 AND status = 'pending'`,
+      [soId]
+    );
+    if (tasks.length === 0) {
+      const { rows: any } = await client.query(`SELECT id FROM check_tasks WHERE so_id = $1 LIMIT 1`, [soId]);
+      if (any.length === 0) throw new ServiceError('NOT_FOUND', 'No check tasks found for this SO', 404);
+      throw new ServiceError('INVALID_STATUS', 'All tasks already processed', 409);
+    }
+
+    const newStatus = passed ? 'passed' : 'failed';
+    await client.query(
+      `UPDATE check_tasks
+       SET status = $1, checked_by = $2, checked_at = NOW(), notes = COALESCE($3, notes)
+       WHERE so_id = $4 AND status = 'pending'`,
+      [newStatus, userId, notes ?? null, soId]
+    );
+
+    const soStatus = passed ? 'checked' : 'picking';
+    await client.query(
+      `UPDATE sales_orders SET status = $1, updated_at = NOW() WHERE id = $2`,
+      [soStatus, soId]
+    );
+
+    await client.query('COMMIT');
+    return { so_id: soId, passed, so_status: soStatus };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Sales Invoice ────────────────────────────────────────────────────────────

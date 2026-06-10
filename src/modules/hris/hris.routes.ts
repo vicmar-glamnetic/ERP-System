@@ -41,4 +41,11 @@ router.get('/shifts', authGuard, HrisController.getShifts);
 
 router.post('/attendance', authGuard, HrisController.logAttendance);
 
+router.get(
+  '/login-logs',
+  authGuard,
+  requireRole('system_admin', 'hr_manager', 'operations_manager'),
+  HrisController.getLoginLogs
+);
+
 export default router;

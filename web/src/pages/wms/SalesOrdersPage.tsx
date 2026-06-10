@@ -131,7 +131,7 @@ export function SalesOrdersPage() {
           {r.status === 'pending' && (
             <Btn size="sm" onClick={(e) => { e.stopPropagation(); setPickTarget(r); }}>Pick</Btn>
           )}
-          {(r.status === 'invoiced') && (
+          {(['checked', 'invoiced', 'ready_to_dispatch'].includes(r.status)) && (
             <Btn size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); dispatchMut.mutate(r.id); }}>
               Dispatch
             </Btn>

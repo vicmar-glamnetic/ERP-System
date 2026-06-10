@@ -177,6 +177,50 @@ export async function getMyRoute(driverId: string): Promise<RouteWithStops | nul
   return { ...(route as RouteRow), stops: stops as DeliveryStopRow[] };
 }
 
+export async function getMyRoutes(driverId: string, status?: string): Promise<RouteRow[]> {
+  const params: unknown[] = [driverId];
+  const conditions = ['r.driver_id = $1'];
+
+  if (status) {
+    params.push(status);
+    conditions.push(`r.status = $${params.length}`);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
+  const { rows } = await pool.query(
+    `SELECT r.id, r.route_date, r.status, r.started_at, r.completed_at,
+            v.plate_number, v.type AS vehicle_type,
+            COUNT(ds.id)::int AS stop_count
+     FROM routes r
+     JOIN vehicles v ON v.id = r.vehicle_id
+     LEFT JOIN delivery_stops ds ON ds.route_id = r.id
+     ${where}
+     GROUP BY r.id, r.route_date, r.status, r.started_at, r.completed_at,
+              v.plate_number, v.type
+     ORDER BY r.route_date DESC, r.created_at DESC
+     LIMIT 50`,
+    params
+  );
+  return rows;
+}
+
+export async function getMyFuelLogs(driverId: string): Promise<FuelLogRow[]> {
+  const { rows } = await pool.query(
+    `SELECT f.id, f.route_id, f.liters::float, f.distance_km::float, f.logged_at,
+            ROUND((f.distance_km / NULLIF(f.liters, 0))::numeric, 2)::float AS efficiency_km_per_l,
+            v.plate_number, r.route_date
+     FROM fuel_logs f
+     JOIN vehicles v ON v.id = f.vehicle_id
+     JOIN routes r ON r.id = f.route_id
+     WHERE f.driver_id = $1
+     ORDER BY f.logged_at DESC
+     LIMIT 20`,
+    [driverId]
+  );
+  return rows as FuelLogRow[];
+}
+
 export async function startRoute(routeId: string, userId: string, userRole: string): Promise<RouteRow> {
   const { rows: [route] } = await pool.query(
     `SELECT id, status, driver_id FROM routes WHERE id = $1`,
@@ -312,10 +356,25 @@ export async function confirmDelivery(
 // ─── Fuel ─────────────────────────────────────────────────────────────────────
 
 export async function submitFuelLog(body: FuelLogBody, driverId: string): Promise<FuelLogRow> {
-  const { route_id, vehicle_id, liters, distance_km } = body;
+  const { route_id, liters, distance_km } = body;
+
+  // Derive vehicle_id from the route if not provided
+  let vehicle_id = body.vehicle_id;
+  if (!vehicle_id) {
+    const { rows: [route] } = await pool.query(
+      `SELECT vehicle_id FROM routes WHERE id = $1 AND driver_id = $2`,
+      [route_id, driverId]
+    );
+    if (!route) throw new ServiceError('NOT_FOUND', 'Route not found or not assigned to you', 404);
+    vehicle_id = route.vehicle_id as string;
+  }
+
   const { rows: [log] } = await pool.query(
     `INSERT INTO fuel_logs (route_id, driver_id, vehicle_id, liters, distance_km)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, route_id, driver_id, vehicle_id,
+               liters::float, distance_km::float, logged_at,
+               ROUND((distance_km / NULLIF(liters, 0))::numeric, 2)::float AS efficiency_km_per_l`,
     [route_id, driverId, vehicle_id, liters, distance_km]
   );
   return log as FuelLogRow;

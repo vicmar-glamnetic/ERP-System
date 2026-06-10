@@ -24,6 +24,7 @@ function isUniqueViolation(err: unknown): boolean {
 export async function getAllEmployees(filters: {
   status?: string;
   department?: string;
+  role?: string;
   page: number;
   limit: number;
 }): Promise<{ data: EmployeeRow[]; total: number }> {
@@ -32,23 +33,36 @@ export async function getAllEmployees(filters: {
 
   if (filters.status) {
     params.push(filters.status);
-    conditions.push(`status = $${params.length}`);
+    conditions.push(`u.status = $${params.length}`);
   }
 
   if (filters.department) {
     params.push(filters.department);
-    conditions.push(`department = $${params.length}`);
+    conditions.push(`u.department = $${params.length}`);
+  }
+
+  if (filters.role) {
+    params.push(filters.role);
+    conditions.push(`u.role = $${params.length}`);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const countResult = await pool.query(`SELECT COUNT(*) FROM users ${where}`, params);
+  const countResult = await pool.query(`SELECT COUNT(*) FROM users u ${where}`, params);
   const total = parseInt(countResult.rows[0].count as string, 10);
 
   const offset = (filters.page - 1) * filters.limit;
   const dataResult = await pool.query(
-    `SELECT ${EMPLOYEE_COLUMNS} FROM users ${where}
-     ORDER BY created_at DESC
+    `SELECT u.${EMPLOYEE_COLUMNS.split(', ').join(', u.')},
+            ll.logged_in_at AS last_login,
+            ll.device_type  AS last_device
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT logged_in_at, device_type FROM login_logs
+       WHERE user_id = u.id ORDER BY logged_in_at DESC LIMIT 1
+     ) ll ON true
+     ${where}
+     ORDER BY u.created_at DESC
      LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
     [...params, filters.limit, offset]
   );
@@ -156,15 +170,15 @@ export async function changePassword(
 
 export async function createShift(body: CreateShiftBody) {
   const { rows } = await pool.query(
-    `INSERT INTO shifts (employee_id, shift_date, zone, clock_in, clock_out)
+    `INSERT INTO shifts (employee_id, shift_date, shift_type, start_time, end_time)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
     [
       body.employee_id,
       body.shift_date,
-      body.zone ?? null,
-      body.clock_in ?? null,
-      body.clock_out ?? null,
+      body.shift_type ?? 'regular',
+      body.start_time ?? null,
+      body.end_time ?? null,
     ]
   );
   return rows[0];
@@ -226,4 +240,28 @@ export async function logAttendance(employeeId: string, eventType: string) {
     [employeeId, eventType]
   );
   return rows[0];
+}
+
+export async function getLoginLogs(filters: { user_id?: string; limit: number }) {
+  const params: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (filters.user_id) {
+    params.push(filters.user_id);
+    conditions.push(`ll.user_id = $${params.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const { rows } = await pool.query(
+    `SELECT ll.id, ll.user_id, ll.logged_in_at, ll.device_type, ll.ip_address,
+            u.employee_code, u.full_name, u.role
+     FROM login_logs ll
+     JOIN users u ON u.id = ll.user_id
+     ${where}
+     ORDER BY ll.logged_in_at DESC
+     LIMIT $${params.length + 1}`,
+    [...params, filters.limit]
+  );
+  return rows;
 }

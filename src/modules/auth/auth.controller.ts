@@ -15,7 +15,10 @@ function handleServiceError(err: unknown, res: Response, next: NextFunction): vo
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { employee_code, password } = req.body as LoginBody;
-    const result = await AuthService.login(employee_code, password);
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ?? req.socket.remoteAddress ?? undefined;
+    const userAgent = req.headers['user-agent'] ?? '';
+    const device_type = /expo|okhttp|dart/i.test(userAgent) ? 'mobile' : 'web';
+    const result = await AuthService.login(employee_code, password, { ip, device_type });
     sendSuccess(res, result);
   } catch (err) {
     handleServiceError(err, res, next);

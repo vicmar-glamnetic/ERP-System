@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { PickTask, PurchaseOrder, BinLocation } from '../types';
+import { PickTask, PurchaseOrder, BinLocation, CheckTask as CheckTaskType } from '../types';
 
 export async function getMyPickTasks(): Promise<PickTask[]> {
   const { data } = await apiClient.get('/wms/pick-tasks/mine');
@@ -66,6 +66,15 @@ export interface PutawayTask {
   to_level: string;
 }
 
+export interface PendingPutawayItem {
+  grn_log_id: string;
+  product_sku: string;
+  product_name: string;
+  qty_received: number;
+  lot_number: string | null;
+  received_at?: string;
+}
+
 export async function getMyPutawayTasks(): Promise<PutawayTask[]> {
   const { data } = await apiClient.get('/wms/putaway/mine');
   return data.data as PutawayTask[];
@@ -76,6 +85,18 @@ export async function confirmPutaway(
   scanned_bin_id: string
 ): Promise<void> {
   await apiClient.post('/wms/putaway/confirm', { putaway_task_id, scanned_bin_id });
+}
+
+export async function getPendingPutaway(): Promise<PendingPutawayItem[]> {
+  const { data } = await apiClient.get('/wms/putaway/pending');
+  return data.data as PendingPutawayItem[];
+}
+
+export async function confirmPutawayFreeForm(
+  grn_log_id: string,
+  bin_id: string
+): Promise<void> {
+  await apiClient.post('/wms/putaway/confirm-free', { grn_log_id, bin_id });
 }
 
 export async function getBinBarcode(binId: string): Promise<{
@@ -120,4 +141,17 @@ export async function failCheckTask(
   notes: string
 ): Promise<void> {
   await apiClient.post('/wms/check-tasks/fail', { check_task_id, notes });
+}
+
+export async function getCheckTasks(): Promise<CheckTaskType[]> {
+  const { data } = await apiClient.get('/wms/check-tasks/grouped');
+  return data.data as CheckTaskType[];
+}
+
+export async function completeCheckTask(
+  soId: string,
+  passed: boolean,
+  notes?: string
+): Promise<void> {
+  await apiClient.post(`/wms/check-tasks/${soId}/complete`, { passed, notes });
 }

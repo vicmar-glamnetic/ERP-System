@@ -2,7 +2,7 @@ import { api } from './client';
 import type {
   PurchaseOrder, POLine, SalesOrder, SalesInvoice, SILine,
   CheckTask, Product, Warehouse, BinLocation, InventoryRow,
-  Vehicle, Route, LiveGPS, Branch, SupplierInvoice, Employee, Shift,
+  Vehicle, Route, LiveGPS, Branch, SupplierInvoice, Employee, Shift, LoginLog,
 } from '../types';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ export const inventoryApi = {
   createProduct: (body: Partial<Product>) =>
     api.post('/products', body).then((r) => r.data.data),
   stock: (params?: Record<string, string>): Promise<InventoryRow[]> =>
-    api.get('/inventory/stock', { params }).then((r) => r.data.data),
+    api.get('/inventory', { params }).then((r) => r.data.data?.data ?? r.data.data ?? []),
   createWarehouse: (body: unknown) => api.post('/warehouses', body).then((r) => r.data.data),
 };
 
@@ -130,8 +130,10 @@ export const hrisApi = {
     api.get(`/hris/employees/${id}`).then((r) => r.data.data),
   createEmployee: (body: unknown) =>
     api.post('/hris/employees', body).then((r) => r.data.data),
-  shifts: (params?: Record<string, string>): Promise<{ data: Shift[]; total: number }> =>
+  shifts: (params?: Record<string, string>): Promise<Shift[]> =>
     api.get('/hris/shifts', { params }).then((r) => r.data.data),
   createShift: (body: unknown) =>
     api.post('/hris/shifts', body).then((r) => r.data.data),
+  loginLogs: (params?: Record<string, string>): Promise<LoginLog[]> =>
+    api.get('/hris/login-logs', { params }).then((r) => r.data.data),
 };

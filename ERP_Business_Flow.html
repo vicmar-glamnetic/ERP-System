@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ERP System — Business Flow</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11pt;
+    color: #1a1a2e;
+    background: #ffffff;
+    line-height: 1.6;
+  }
+
+  /* ── Cover Page ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 80px 60px;
+    background: linear-gradient(135deg, #0f3460 0%, #16213e 60%, #1a1a2e 100%);
+    color: white;
+    page-break-after: always;
+  }
+  .cover-badge {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    color: #93c5fd;
+  }
+  .cover h1 {
+    font-size: 40pt;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    letter-spacing: -1px;
+  }
+  .cover h1 span { color: #60a5fa; }
+  .cover-subtitle {
+    font-size: 14pt;
+    font-weight: 400;
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 56px;
+    max-width: 480px;
+  }
+  .cover-meta {
+    font-size: 9pt;
+    color: rgba(255,255,255,0.4);
+    border-top: 1px solid rgba(255,255,255,0.15);
+    padding-top: 20px;
+    width: 100%;
+    display: flex;
+    gap: 40px;
+  }
+  .cover-meta span { display: block; }
+  .cover-meta strong { color: rgba(255,255,255,0.7); font-weight: 600; }
+
+  /* ── Page layout ── */
+  .page {
+    padding: 48px 56px;
+    page-break-inside: avoid;
+  }
+  .page-break { page-break-before: always; padding-top: 48px; padding-left: 56px; padding-right: 56px; padding-bottom: 48px; }
+
+  /* ── Section headers ── */
+  .section-label {
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #6366f1;
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-size: 20pt;
+    font-weight: 800;
+    color: #0f3460;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+  }
+  h3 {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-top: 28px;
+    margin-bottom: 10px;
+  }
+  .section-rule {
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1, #60a5fa, transparent);
+    border: none;
+    margin-bottom: 28px;
+    border-radius: 2px;
+  }
+
+  /* ── Module map ── */
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 20px 0 32px;
+  }
+  .module-card {
+    border-radius: 10px;
+    padding: 16px 18px;
+    border-left: 4px solid;
+  }
+  .module-card.auth    { background: #f0f4ff; border-color: #6366f1; }
+  .module-card.hris    { background: #f0fdf4; border-color: #22c55e; }
+  .module-card.inv     { background: #fff7ed; border-color: #f97316; }
+  .module-card.wms     { background: #eff6ff; border-color: #3b82f6; }
+  .module-card.tms     { background: #fdf4ff; border-color: #a855f7; }
+  .module-card.finance { background: #fffbeb; border-color: #eab308; }
+
+  .module-card .mod-name {
+    font-size: 11pt;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .module-card .mod-desc {
+    font-size: 9pt;
+    color: #555;
+    line-height: 1.4;
+  }
+
+  /* ── Flow diagrams ── */
+  .flow-block {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 12px 0 24px;
+    page-break-inside: avoid;
+  }
+  .flow-block .flow-title {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #0f3460;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .flow-block .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 8pt;
+    font-weight: 600;
+  }
+  .badge.blue   { background: #dbeafe; color: #1d4ed8; }
+  .badge.green  { background: #dcfce7; color: #15803d; }
+  .badge.purple { background: #ede9fe; color: #6d28d9; }
+  .badge.amber  { background: #fef3c7; color: #92400e; }
+
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+  .flow-step:last-child { margin-bottom: 0; }
+  .step-num {
+    min-width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #0f3460;
+    color: white;
+    font-size: 8.5pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+  .step-num.blue   { background: #3b82f6; }
+  .step-num.green  { background: #22c55e; }
+  .step-num.purple { background: #a855f7; }
+  .step-num.amber  { background: #eab308; }
+
+  .step-content { font-size: 10pt; line-height: 1.5; }
+  .step-content strong { color: #0f3460; }
+  .step-content .module-tag {
+    font-size: 8pt;
+    font-weight: 600;
+    color: #6366f1;
+    background: #eef2ff;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+  .step-sub {
+    margin-top: 4px;
+    margin-left: 0;
+    display: flex;
+    gap: 8px;
+  }
+  .step-sub .sub-item {
+    font-size: 9pt;
+    color: #555;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 3px 10px;
+  }
+  .sub-item.fail { color: #dc2626; border-color: #fca5a5; background: #fff5f5; }
+  .sub-item.pass { color: #16a34a; border-color: #86efac; background: #f0fdf4; }
+
+  /* ── Dependency map ── */
+  .dep-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin: 16px 0;
+  }
+  .dep-item {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 9.5pt;
+  }
+  .dep-item .dep-from { font-weight: 700; color: #0f3460; }
+  .dep-item .dep-arrow { color: #6366f1; font-weight: 700; margin: 0 4px; }
+  .dep-item .dep-to { color: #374151; }
+  .dep-item .dep-desc { font-size: 8.5pt; color: #6b7280; margin-top: 3px; }
+
+  /* ── Role table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+  }
+  thead tr { background: #0f3460; color: white; }
+  thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 9pt;
+    letter-spacing: 0.3px;
+  }
+  tbody tr:nth-child(odd)  { background: #f8fafc; }
+  tbody tr:nth-child(even) { background: #ffffff; }
+  tbody td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  .role-tag {
+    display: inline-block;
+    font-family: 'Courier New', monospace;
+    font-size: 8.5pt;
+    background: #1e3a5f;
+    color: #93c5fd;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 8pt;
+    color: #9ca3af;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media print {
+    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .cover { min-height: 100vh; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ COVER ══════════════════ -->
+<div class="cover">
+  <div class="cover-badge">Internal Documentation</div>
+  <h1>ERP System<br /><span>Business Flow</span></h1>
+  <p class="cover-subtitle">
+    End-to-end documentation of all operational flows — procurement, sales fulfillment, last-mile delivery, workforce management, and finance.
+  </p>
+  <div class="cover-meta">
+    <div><span><strong>Version</strong></span><span>1.0</span></div>
+    <div><span><strong>Date</strong></span><span>June 2026</span></div>
+    <div><span><strong>Modules</strong></span><span>AUTH · HRIS · INVENTORY · WMS · TMS · FINANCE</span></div>
+  </div>
+</div>
+
+
+<!-- ══════════════════ PAGE 1: MODULE MAP ══════════════════ -->
+<div class="page">
+  <div class="section-label">Overview</div>
+  <h2>System Modules</h2>
+  <hr class="section-rule" />
+
+  <p style="font-size:10.5pt; color:#374151; margin-bottom:20px;">
+    The ERP system is composed of six modules. <strong>WMS is the operational hub</strong> — it sits at the intersection of inventory, logistics, and finance, orchestrating the core fulfillment pipeline.
+  </p>
+
+  <div class="module-grid">
+    <div class="module-card auth">
+      <div class="mod-name">AUTH</div>
+      <div class="mod-desc">Authentication &amp; session management. JWT-based login, token refresh, and user profile. Foundation for all other modules.</div>
+    </div>
+    <div class="module-card hris">
+      <div class="mod-name">HRIS</div>
+      <div class="mod-desc">Human Resources — employee records, shift scheduling, attendance tracking, and login audit logs.</div>
+    </div>
+    <div class="module-card inv">
+      <div class="mod-name">INVENTORY</div>
+      <div class="mod-desc">Product catalog, warehouse bin locations, and real-time stock levels. Central ledger for all physical goods.</div>
+    </div>
+    <div class="module-card wms">
+      <div class="mod-name">WMS</div>
+      <div class="mod-desc">Warehouse operations — inbound receiving &amp; putaway, outbound picking, QC checking, dispatch, and invoice generation.</div>
+    </div>
+    <div class="module-card tms">
+      <div class="mod-name">TMS</div>
+      <div class="mod-desc">Transportation — route planning, GPS tracking, delivery confirmation (POD), and driver fuel logging.</div>
+    </div>
+    <div class="module-card finance">
+      <div class="mod-name">FINANCE</div>
+      <div class="mod-desc">Accounts Payable (AP) and Accounts Receivable (AR) — invoices, payments, aging summaries, and branch management.</div>
+    </div>
+  </div>
+
+  <h3>Cross-Module Dependencies</h3>
+  <div class="dep-grid">
+    <div class="dep-item">
+      <span class="dep-from">WMS</span><span class="dep-arrow">→</span><span class="dep-to">INVENTORY</span>
+      <div class="dep-desc">Receiving goods adds stock; confirming picks deducts stock from bins.</div>
+    </div>
+    <div class="dep-item">
+      <span class="dep-from">WMS</span><span class="dep-arrow">→</span><span class="dep-to">TMS</span>
+      <div class="dep-desc">Dispatching a sales order triggers creation of a TMS delivery route.</div>
+    </div>
+    <div class="dep-item">
+      <span class="dep-from">WMS</span><span class="dep-arrow">→</span><span class="dep-to">FINANCE</span>
+      <div class="dep-desc">Fulfilled SOs generate AR invoices; POs feed AP invoices.</div>
+    </div>
+    <div class="dep-item">
+      <span class="dep-from">HRIS</span><span class="dep-arrow">→</span><span class="dep-to">WMS / TMS</span>
+      <div class="dep-desc">Employee records used when assigning pick tasks, putaway, check tasks, and driver routes.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════ PAGE 2: PROCUREMENT FLOW ══════════════════ -->
+<div class="page-break">
+  <div class="section-label">Flow 1</div>
+  <h2>Procurement-to-Pay</h2>
+  <hr class="section-rule" />
+  <p style="font-size:10.5pt; color:#374151; margin-bottom:16px;">
+    Covers the inbound goods journey from supplier purchase order through to payment. Managed by Operations Managers, Warehouse teams, and Finance.
+  </p>
+
+  <div class="flow-block">
+    <div class="flow-title">
+      Inbound Receiving Workflow
+      <span class="badge blue">WMS + INVENTORY + FINANCE</span>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num blue">1</div>
+      <div class="step-content">
+        <strong>Create Purchase Order</strong><span class="module-tag">WMS</span><br/>
+        Operations Manager creates a PO with supplier and product lines. Status: <em>pending</em>.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num blue">2</div>
+      <div class="step-content">
+        <strong>Receive Goods at Warehouse</strong><span class="module-tag">WMS</span><br/>
+        Warehouse Supervisor or Operator records received quantities against the PO. A Goods Receiving Note (GRN) is created. Stock is added to INVENTORY at a staging bin.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num blue">3</div>
+      <div class="step-content">
+        <strong>Generate Putaway Tasks</strong><span class="module-tag">WMS</span><br/>
+        Supervisor generates putaway tasks from the GRN. Tasks are assigned to a Warehouse Operator.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num blue">4</div>
+      <div class="step-content">
+        <strong>Execute Putaway</strong><span class="module-tag">WMS · INVENTORY</span><br/>
+        Operator scans or manually assigns each item to a bin location. On confirmation, stock is moved from staging to the target bin. INVENTORY levels updated.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num blue">5</div>
+      <div class="step-content">
+        <strong>Create &amp; Pay Supplier Invoice</strong><span class="module-tag">FINANCE</span><br/>
+        Finance Officer creates an AP invoice linked to the PO. Payment is recorded when processed, updating the AP aging report.
+      </div>
+    </div>
+  </div>
+
+  <h3>Roles Involved</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Role</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Create PO</td><td><span class="role-tag">operations_manager</span></td><td>Initiates purchase from supplier</td></tr>
+      <tr><td>Receive Goods</td><td><span class="role-tag">wh_supervisor</span> · <span class="role-tag">wh_operator</span></td><td>Logs received quantities against PO</td></tr>
+      <tr><td>Generate Putaway</td><td><span class="role-tag">wh_supervisor</span></td><td>Creates and assigns putaway tasks</td></tr>
+      <tr><td>Execute Putaway</td><td><span class="role-tag">wh_operator</span></td><td>Moves goods to bin locations</td></tr>
+      <tr><td>AP Invoice / Payment</td><td><span class="role-tag">finance_officer</span></td><td>Records payable and payment</td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ══════════════════ PAGE 3: SALES FLOW ══════════════════ -->
+<div class="page-break">
+  <div class="section-label">Flow 2</div>
+  <h2>Order-to-Cash (Sales Fulfillment)</h2>
+  <hr class="section-rule" />
+  <p style="font-size:10.5pt; color:#374151; margin-bottom:16px;">
+    The outbound order pipeline from sales order creation through picking, quality check, dispatch, and payment collection.
+  </p>
+
+  <div class="flow-block">
+    <div class="flow-title">
+      Outbound Fulfillment Workflow
+      <span class="badge green">WMS + TMS + FINANCE</span>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num green">1</div>
+      <div class="step-content">
+        <strong>Create Sales Order</strong><span class="module-tag">WMS</span><br/>
+        Operations Manager creates an SO specifying customer, delivery date, and ordered products. Status: <em>pending</em>.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num green">2</div>
+      <div class="step-content">
+        <strong>Generate Pick Tasks</strong><span class="module-tag">WMS · INVENTORY</span><br/>
+        Supervisor generates pick tasks from the SO. Each task maps a product to its bin location. Tasks assigned to Warehouse Operators.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num green">3</div>
+      <div class="step-content">
+        <strong>Execute Picking</strong><span class="module-tag">WMS · INVENTORY</span><br/>
+        Operator picks items from bins and confirms each line. Reserved stock is deducted from INVENTORY. SO status moves to <em>packed</em>.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num green">4</div>
+      <div class="step-content">
+        <strong>Quality Check</strong><span class="module-tag">WMS</span><br/>
+        Checker reviews all lines of the picked order against expected quantities.
+        <div class="step-sub">
+          <span class="sub-item fail">FAIL — returns to picking</span>
+          <span class="sub-item pass">PASS — ready to dispatch</span>
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num green">5</div>
+      <div class="step-content">
+        <strong>Dispatch &amp; Invoice</strong><span class="module-tag">WMS → TMS · FINANCE</span><br/>
+        Supervisor dispatches the SO — this triggers a TMS delivery route. WMS generates a Sales Invoice, which appears in Finance as an AR receivable.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num green">6</div>
+      <div class="step-content">
+        <strong>Collect Payment</strong><span class="module-tag">FINANCE</span><br/>
+        Finance Officer records customer payment against the AR invoice. Aging report updated.
+      </div>
+    </div>
+  </div>
+
+  <h3>Roles Involved</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Role</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Create SO</td><td><span class="role-tag">operations_manager</span></td><td>Initiates customer order</td></tr>
+      <tr><td>Generate Picks</td><td><span class="role-tag">wh_supervisor</span></td><td>Auto-generates tasks per SO line</td></tr>
+      <tr><td>Execute Picks</td><td><span class="role-tag">wh_operator</span></td><td>Physical picking from bins</td></tr>
+      <tr><td>Quality Check</td><td><span class="role-tag">checker</span></td><td>Verify packed quantities</td></tr>
+      <tr><td>Dispatch</td><td><span class="role-tag">wh_supervisor</span> · <span class="role-tag">dispatcher</span></td><td>Release order to logistics</td></tr>
+      <tr><td>AR Payment</td><td><span class="role-tag">finance_officer</span></td><td>Records customer payment</td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ══════════════════ PAGE 4: TMS FLOW ══════════════════ -->
+<div class="page-break">
+  <div class="section-label">Flow 3</div>
+  <h2>Last-Mile Delivery</h2>
+  <hr class="section-rule" />
+  <p style="font-size:10.5pt; color:#374151; margin-bottom:16px;">
+    The physical delivery execution from route creation through GPS tracking, proof of delivery, and fuel logging.
+  </p>
+
+  <div class="flow-block">
+    <div class="flow-title">
+      Delivery Execution Workflow
+      <span class="badge purple">TMS</span>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num purple">1</div>
+      <div class="step-content">
+        <strong>Create Delivery Route</strong><span class="module-tag">TMS</span><br/>
+        Dispatcher creates a route with a vehicle, driver, and ordered delivery stops. Each stop is linked to a dispatched Sales Order.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num purple">2</div>
+      <div class="step-content">
+        <strong>Driver Starts Route</strong><span class="module-tag">TMS</span><br/>
+        Driver opens the mobile app, views today's route, and taps "Start Route." Route status changes to <em>in_progress</em>.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num purple">3</div>
+      <div class="step-content">
+        <strong>Real-Time GPS Tracking</strong><span class="module-tag">TMS</span><br/>
+        Mobile app sends GPS pings while driving. Operations team can monitor all active vehicles on a live map dashboard.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num purple">4</div>
+      <div class="step-content">
+        <strong>Confirm Delivery (POD)</strong><span class="module-tag">TMS</span><br/>
+        Driver confirms each stop with optional notes and photo (Proof of Delivery). Stop status: <em>delivered</em>.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num purple">5</div>
+      <div class="step-content">
+        <strong>Log Fuel</strong><span class="module-tag">TMS</span><br/>
+        After completing the route, driver selects the completed route, enters liters used and distance driven. System computes fuel efficiency (km/L) automatically.
+      </div>
+    </div>
+  </div>
+
+  <h3>Roles Involved</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Role</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Create Route</td><td><span class="role-tag">dispatcher</span> · <span class="role-tag">operations_manager</span></td><td>Plan stops and assign driver/vehicle</td></tr>
+      <tr><td>Start Route</td><td><span class="role-tag">driver</span></td><td>Begin delivery on mobile app</td></tr>
+      <tr><td>GPS Tracking</td><td><span class="role-tag">driver</span> (sends) · <span class="role-tag">dispatcher</span> (views)</td><td>Real-time vehicle monitoring</td></tr>
+      <tr><td>Confirm Delivery</td><td><span class="role-tag">driver</span></td><td>POD with photo per stop</td></tr>
+      <tr><td>Fuel Log</td><td><span class="role-tag">driver</span></td><td>Post-route fuel and distance entry</td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ══════════════════ PAGE 5: HRIS FLOW ══════════════════ -->
+<div class="page-break">
+  <div class="section-label">Flow 4</div>
+  <h2>Workforce Management</h2>
+  <hr class="section-rule" />
+  <p style="font-size:10.5pt; color:#374151; margin-bottom:16px;">
+    Employee lifecycle from onboarding through daily shift and attendance management, with full login audit visibility.
+  </p>
+
+  <div class="flow-block">
+    <div class="flow-title">
+      HRIS Workflow
+      <span class="badge amber">HRIS</span>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num amber">1</div>
+      <div class="step-content">
+        <strong>Create Employee Account</strong><span class="module-tag">HRIS</span><br/>
+        HR Manager creates a user record with employee code, full name, department, and assigned role. The role controls what the employee can access across all modules.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num amber">2</div>
+      <div class="step-content">
+        <strong>Assign Shifts</strong><span class="module-tag">HRIS</span><br/>
+        HR creates shift records (start time, end time, shift type) for employees. Shifts can be morning, afternoon, or night.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num amber">3</div>
+      <div class="step-content">
+        <strong>Daily Attendance</strong><span class="module-tag">HRIS</span><br/>
+        Employees clock in and out. Attendance records are linked to assigned shifts. Status is tracked (present, absent, late).
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num amber">4</div>
+      <div class="step-content">
+        <strong>Login Audit</strong><span class="module-tag">HRIS</span><br/>
+        Every login is recorded (timestamp, device type, IP address). HR and Operations Managers can view login history per employee with device icons for quick identification.
+      </div>
+    </div>
+  </div>
+
+  <h3>Role Hierarchy &amp; System-Wide Access</h3>
+  <table>
+    <thead><tr><th>Role</th><th>Modules</th><th>Key Responsibilities</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="role-tag">system_admin</span></td>
+        <td>All modules</td>
+        <td>Full access to every operation and record</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">operations_manager</span></td>
+        <td>HRIS, Inventory, WMS, TMS, Finance</td>
+        <td>Create orders, manage inventory, oversee all operations</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">hr_manager</span> · <span class="role-tag">hr_staff</span></td>
+        <td>HRIS</td>
+        <td>Employee records, shift scheduling, attendance</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">wh_supervisor</span></td>
+        <td>Inventory, WMS</td>
+        <td>Generate pick/putaway/check tasks, dispatch orders</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">wh_operator</span></td>
+        <td>WMS, Inventory</td>
+        <td>Execute picks, receive goods, putaway</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">checker</span></td>
+        <td>WMS</td>
+        <td>Quality control of packed orders before dispatch</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">dispatcher</span></td>
+        <td>WMS, TMS</td>
+        <td>Create delivery routes, monitor GPS, manage vehicles</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">driver</span></td>
+        <td>TMS</td>
+        <td>Start routes, confirm deliveries, log fuel</td>
+      </tr>
+      <tr>
+        <td><span class="role-tag">finance_officer</span></td>
+        <td>Finance</td>
+        <td>AP/AR invoice management and payment recording</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <span>ERP System — Business Flow Documentation</span>
+    <span>Confidential · Internal Use Only · June 2026</span>
+  </div>
+</div>
+
+</body>
+</html>

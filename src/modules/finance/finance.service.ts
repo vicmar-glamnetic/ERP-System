@@ -139,7 +139,7 @@ export async function getSupplierInvoiceById(id: string) {
   const { rows: [invoice] } = await pool.query(
     `SELECT si.*, po.po_number
      FROM supplier_invoices si
-     JOIN purchase_orders po ON si.po_id = po.id
+     LEFT JOIN purchase_orders po ON si.po_id = po.id
      WHERE si.id = $1`,
     [id]
   );
@@ -213,12 +213,13 @@ export async function recordAPPayment(body: RecordAPPaymentBody, createdBy: stri
 export async function getAPSummary() {
   const { rows: [summary] } = await pool.query(
     `SELECT
-       COUNT(*) FILTER (WHERE payment_status = 'unpaid')   AS unpaid_count,
-       COUNT(*) FILTER (WHERE payment_status = 'partial')  AS partial_count,
-       COUNT(*) FILTER (WHERE payment_status = 'paid')     AS paid_count,
-       COALESCE(SUM(total_amount), 0)::float               AS total_invoiced,
-       COALESCE(SUM(amount_paid),  0)::float               AS total_paid,
-       COALESCE(SUM(balance_due),  0)::float               AS total_outstanding,
+       COUNT(*) FILTER (WHERE payment_status = 'unpaid')                                    AS unpaid_count,
+       COUNT(*) FILTER (WHERE payment_status = 'partial')                                   AS partial_count,
+       COUNT(*) FILTER (WHERE payment_status = 'paid')                                      AS paid_count,
+       COUNT(*) FILTER (WHERE due_date < CURRENT_DATE AND payment_status != 'paid')         AS overdue_count,
+       COALESCE(SUM(total_amount), 0)::float                                                AS total_invoiced,
+       COALESCE(SUM(amount_paid),  0)::float                                                AS total_paid,
+       COALESCE(SUM(balance_due),  0)::float                                                AS total_outstanding,
        COALESCE(SUM(balance_due) FILTER (WHERE due_date < CURRENT_DATE AND payment_status != 'paid'), 0)::float AS overdue_amount
      FROM supplier_invoices`
   );
@@ -359,12 +360,13 @@ export async function recordARPayment(body: RecordARPaymentBody, createdBy: stri
 export async function getARSummary() {
   const { rows: [summary] } = await pool.query(
     `SELECT
-       COUNT(*) FILTER (WHERE payment_status = 'unpaid')   AS unpaid_count,
-       COUNT(*) FILTER (WHERE payment_status = 'partial')  AS partial_count,
-       COUNT(*) FILTER (WHERE payment_status = 'paid')     AS paid_count,
-       COALESCE(SUM(total_amount), 0)::float               AS total_invoiced,
-       COALESCE(SUM(amount_paid),  0)::float               AS total_collected,
-       COALESCE(SUM(balance_due),  0)::float               AS total_outstanding
+       COUNT(*) FILTER (WHERE payment_status = 'unpaid')                                              AS unpaid_count,
+       COUNT(*) FILTER (WHERE payment_status = 'partial')                                             AS partial_count,
+       COUNT(*) FILTER (WHERE payment_status = 'paid')                                                AS paid_count,
+       COUNT(*) FILTER (WHERE payment_status != 'paid' AND issued_at < NOW() - INTERVAL '30 days')   AS overdue_count,
+       COALESCE(SUM(total_amount), 0)::float                                                          AS total_invoiced,
+       COALESCE(SUM(amount_paid),  0)::float                                                          AS total_collected,
+       COALESCE(SUM(balance_due),  0)::float                                                          AS total_outstanding
      FROM sales_invoices`
   );
   return summary;

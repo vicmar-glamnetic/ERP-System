@@ -30,7 +30,7 @@ const PERMISSIONS: Record<string, string[]> = {
   checker: ['wms:own', 'checking:own', 'shifts:own'],
 };
 
-export async function login(employeeCode: string, password: string) {
+export async function login(employeeCode: string, password: string, meta?: { ip?: string; device_type?: string }) {
   const { rows } = await pool.query(
     'SELECT * FROM users WHERE employee_code = $1',
     [employeeCode]
@@ -61,6 +61,11 @@ export async function login(employeeCode: string, password: string) {
   await pool.query(
     'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
     [user.id, refreshToken, expiresAt]
+  );
+
+  void pool.query(
+    'INSERT INTO login_logs (user_id, device_type, ip_address) VALUES ($1, $2, $3)',
+    [user.id, meta?.device_type ?? 'web', meta?.ip ?? null]
   );
 
   return {

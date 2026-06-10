@@ -25,9 +25,9 @@ export interface ChangePasswordBody {
 export interface CreateShiftBody {
   employee_id: string;
   shift_date: string;
-  zone?: string;
-  clock_in?: string;
-  clock_out?: string;
+  shift_type?: string;
+  start_time?: string;
+  end_time?: string;
 }
 
 export interface AttendanceBody {

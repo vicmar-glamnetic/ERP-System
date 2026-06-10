@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Route } from '../types';
+import { Route, CompletedRoute, FuelLogEntry } from '../types';
 import * as FileSystem from 'expo-file-system/legacy';
 
 export async function getMyRouteToday(): Promise<Route | null> {
@@ -44,11 +44,21 @@ export async function confirmDelivery(
 
 export async function submitFuelLog(
   route_id: string,
-  vehicle_id: string,
   liters: number,
   distance_km: number
-): Promise<void> {
-  await apiClient.post('/tms/fuel-log', { route_id, vehicle_id, liters, distance_km });
+): Promise<FuelLogEntry> {
+  const { data } = await apiClient.post('/tms/fuel-log', { route_id, liters, distance_km });
+  return data.data as FuelLogEntry;
+}
+
+export async function getCompletedRoutes(): Promise<CompletedRoute[]> {
+  const { data } = await apiClient.get('/tms/routes/mine?status=completed');
+  return data.data as CompletedRoute[];
+}
+
+export async function getMyFuelLogs(): Promise<FuelLogEntry[]> {
+  const { data } = await apiClient.get('/tms/fuel-logs/mine');
+  return data.data as FuelLogEntry[];
 }
 
 export async function getAllRoutes(status?: string): Promise<Route[]> {

@@ -107,7 +107,7 @@ export function ShiftsPage() {
     <div>
       <PageHeader
         title="Shifts"
-        sub={`${data?.data?.length ?? 0} shift records`}
+        sub={`${data?.length ?? 0} shift records`}
         actions={
           <>
             <input
@@ -125,7 +125,7 @@ export function ShiftsPage() {
       <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
         {isLoading
           ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
-          : <Table cols={cols} rows={data?.data ?? []} />}
+          : <Table cols={cols} rows={data ?? []} />}
       </div>
       <CreateShiftModal open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

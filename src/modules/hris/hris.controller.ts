@@ -22,10 +22,11 @@ export async function getAllEmployees(req: Request, res: Response, next: NextFun
   try {
     const status = req.query['status'] as string | undefined;
     const department = req.query['department'] as string | undefined;
+    const role = req.query['role'] as string | undefined;
     const page = parseInt((req.query['page'] as string) ?? '1', 10) || 1;
     const limit = parseInt((req.query['limit'] as string) ?? '20', 10) || 20;
 
-    const result = await HrisService.getAllEmployees({ status, department, page, limit });
+    const result = await HrisService.getAllEmployees({ status, department, role, page, limit });
     sendSuccess(res, result);
   } catch (err) {
     handleError(err, res, next);
@@ -119,6 +120,17 @@ export async function logAttendance(req: Request, res: Response, next: NextFunct
     const { event_type } = req.body as AttendanceBody;
     const log = await HrisService.logAttendance(req.user!.userId, event_type);
     sendSuccess(res, log, 201);
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}
+
+export async function getLoginLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user_id = req.query['user_id'] as string | undefined;
+    const limit = parseInt((req.query['limit'] as string) ?? '100', 10) || 100;
+    const logs = await HrisService.getLoginLogs({ user_id, limit });
+    sendSuccess(res, logs);
   } catch (err) {
     handleError(err, res, next);
   }

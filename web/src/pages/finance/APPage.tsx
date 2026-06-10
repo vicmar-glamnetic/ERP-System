@@ -132,9 +132,57 @@ function RecordPaymentModal({ inv, open, onClose }: { inv: SupplierInvoice | nul
   );
 }
 
+function APDetailModal({ inv, open, onClose, onPay }: { inv: SupplierInvoice | null; open: boolean; onClose: () => void; onPay: (i: SupplierInvoice) => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['ap-invoice-detail', inv?.id],
+    queryFn: () => financeApi.apInvoice(inv!.id),
+    enabled: !!inv?.id,
+    staleTime: 0,
+  });
+  const detail = data as any;
+  return (
+    <Modal open={open} onClose={onClose} title={`Invoice — ${inv?.inv_number}`} width={560}>
+      {isLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><Spinner /></div> : detail && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, marginBottom: 16 }}>
+            {[['Supplier', detail.supplier_name], ['Linked PO', detail.po_number ?? '—'], ['Due Date', detail.due_date ? new Date(detail.due_date).toLocaleDateString('en-PH') : '—'], ['Status', null]].map(([l, v]) => (
+              <div key={l as string} style={{ background: '#F8FAFC', borderRadius: 8, padding: '8px 12px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.4, marginBottom: 2 }}>{l as string}</div>
+                {l === 'Status' ? <Badge status={detail.payment_status} /> : <div style={{ fontWeight: 600, fontSize: 13 }}>{v as string}</div>}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 24, fontSize: 13, marginBottom: 12 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Total: <strong>{fmt(detail.total_amount)}</strong></span>
+            <span style={{ color: 'var(--text-muted)' }}>Paid: <strong style={{ color: 'var(--success)' }}>{fmt(detail.amount_paid)}</strong></span>
+            <span style={{ color: 'var(--text-muted)' }}>Balance: <strong style={{ color: detail.balance_due > 0 ? 'var(--danger)' : 'var(--success)' }}>{fmt(detail.balance_due)}</strong></span>
+          </div>
+          {(detail.payments ?? []).length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Payment History</div>
+              {detail.payments.map((p: any) => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: '#F0FDF4', borderRadius: 6, marginBottom: 4, fontSize: 13 }}>
+                  <span>{new Date(p.payment_date).toLocaleDateString('en-PH')} · {p.payment_method}</span>
+                  <strong style={{ color: 'var(--success)' }}>{fmt(p.amount)}</strong>
+                </div>
+              ))}
+            </>
+          )}
+          {detail.payment_status !== 'paid' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <Btn onClick={() => { onClose(); onPay(inv!); }}><DollarSign size={13} /> Record Payment</Btn>
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
+  );
+}
+
 export function APPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [payTarget, setPayTarget] = useState<SupplierInvoice | null>(null);
+  const [detailTarget, setDetailTarget] = useState<SupplierInvoice | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
 
   const { data: summary } = useQuery({ queryKey: ['ap-summary'], queryFn: financeApi.apSummary });
@@ -164,8 +212,8 @@ export function APPage() {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
-        <KpiCard label="Total Payable" value={fmt(summary?.total_payable)} sub="All outstanding" />
-        <KpiCard label="Total Paid" value={fmt(summary?.total_paid)} sub="This period" />
+        <KpiCard label="Total Payable" value={fmt(summary?.total_outstanding)} sub={`${(summary?.unpaid_count ?? 0) + (summary?.partial_count ?? 0)} unpaid/partial invoices`} color="var(--warning)" />
+        <KpiCard label="Total Paid" value={fmt(summary?.total_paid)} sub={`${summary?.paid_count ?? 0} paid invoices`} color="var(--success)" />
         <KpiCard label="Overdue" value={String(summary?.overdue_count ?? 0)} sub="Past due date" danger />
       </div>
 
@@ -186,11 +234,12 @@ export function APPage() {
       <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
         {isLoading
           ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
-          : <Table cols={cols} rows={data ?? []} />}
+          : <Table cols={cols} rows={data ?? []} onRow={r => setDetailTarget(r)} />}
       </div>
 
       <CreateSINVModal open={showCreate} onClose={() => setShowCreate(false)} />
       <RecordPaymentModal inv={payTarget} open={!!payTarget} onClose={() => setPayTarget(null)} />
+      <APDetailModal inv={detailTarget} open={!!detailTarget} onClose={() => setDetailTarget(null)} onPay={i => setPayTarget(i)} />
     </div>
   );
 }

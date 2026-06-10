@@ -33,7 +33,7 @@ export interface ConfirmDeliveryBody {
 
 export interface FuelLogBody {
   route_id: string;
-  vehicle_id: string;
+  vehicle_id?: string;
   liters: number;
   distance_km: number;
 }
@@ -103,7 +103,9 @@ export interface FuelLogRow {
   vehicle_id: string;
   liters: number;
   distance_km: number;
+  efficiency_km_per_l?: number;
   logged_at: string;
   driver_name?: string;
   plate_number?: string;
+  route_date?: string;
 }

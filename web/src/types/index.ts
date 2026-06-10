@@ -120,6 +120,12 @@ export interface Employee {
   id: string; employee_code: string; full_name: string; email?: string;
   role: string; department?: string; position?: string;
   hire_date?: string; status: string; created_at: string;
+  last_login?: string; last_device?: string;
+}
+export interface LoginLog {
+  id: string; user_id: string; employee_code: string;
+  full_name: string; role: string;
+  logged_in_at: string; device_type: string; ip_address?: string;
 }
 export interface Shift {
   id: string; employee_id: string; employee_name?: string;

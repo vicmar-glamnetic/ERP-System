@@ -49,7 +49,7 @@ export function TMSNavigator() {
         tabBarIcon: ({ focused, color, size }) => {
           const icons: Record<string, string> = {
             'My Route': focused ? 'map' : 'map-outline',
-            'Fuel Log': focused ? 'water' : 'water-outline',
+            Fuel: focused ? 'flame' : 'flame-outline',
             Profile: focused ? 'person' : 'person-outline',
           };
           return <Ionicons name={(icons[route.name] ?? 'ellipse') as any} size={size} color={color} />;
@@ -58,11 +58,12 @@ export function TMSNavigator() {
     >
       <Tab.Screen name="My Route" component={RouteStack} />
       <Tab.Screen
-        name="Fuel Log"
+        name="Fuel"
         component={FuelLogScreen}
         options={{
           headerShown: true,
           title: 'Fuel Log',
+          tabBarActiveTintColor: COLORS.warning,
           headerStyle: { backgroundColor: COLORS.secondary },
           headerTintColor: COLORS.white,
           headerTitleStyle: { fontWeight: '700' },

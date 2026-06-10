@@ -142,6 +142,20 @@ export async function completePutaway(req: Request, res: Response, next: NextFun
   } catch (err) { handleError(err, res, next); }
 }
 
+export async function getPendingPutaway(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const items = await WmsService.getPendingPutaway(req.user!.userId);
+    sendSuccess(res, items);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function confirmPutawayFreeForm(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await WmsService.confirmPutawayFreeForm(req.body, req.user!.userId);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
 // ─── Check Tasks ──────────────────────────────────────────────────────────────
 
 export async function generateCheckTasks(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -179,6 +193,22 @@ export async function confirmCheckTask(req: Request, res: Response, next: NextFu
 export async function failCheckTask(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await WmsService.failCheckTask(req.body as FailCheckBody, req.user!.userId);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function getCheckTasksGrouped(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await WmsService.getCheckTasksGrouped(req.user!.userId);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function completeSOCheckTasks(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const soId = req.params['so_id'] as string;
+    const { passed, notes } = req.body as { passed: boolean; notes?: string };
+    const result = await WmsService.completeSOCheckTasks(soId, passed, notes, req.user!.userId);
     sendSuccess(res, result);
   } catch (err) { handleError(err, res, next); }
 }

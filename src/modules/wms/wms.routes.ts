@@ -71,10 +71,16 @@ router.post(
   Ctrl.generatePutaway
 );
 router.get('/putaway/mine', authGuard, Ctrl.getMyPutawayTasks);
+router.get('/putaway/pending', authGuard, requireRole('system_admin', 'wh_supervisor', 'wh_operator'), Ctrl.getPendingPutaway);
 router.post(
   '/putaway/confirm',
   authGuard, requireRole('system_admin', 'wh_supervisor', 'wh_operator'),
   Ctrl.completePutaway
+);
+router.post(
+  '/putaway/confirm-free',
+  authGuard, requireRole('system_admin', 'wh_supervisor', 'wh_operator'),
+  Ctrl.confirmPutawayFreeForm
 );
 
 // ─── Check Tasks ──────────────────────────────────────────────────────────────
@@ -89,6 +95,8 @@ router.get(
   Ctrl.getCheckTasks
 );
 router.get('/check-tasks/mine', authGuard, Ctrl.getMyCheckTasks);
+router.get('/check-tasks/grouped', authGuard, Ctrl.getCheckTasksGrouped);
+router.post('/check-tasks/:so_id/complete', authGuard, requireRole('system_admin', 'wh_supervisor', 'checker', 'wh_operator'), Ctrl.completeSOCheckTasks);
 router.post(
   '/check-tasks/confirm',
   authGuard, requireRole('system_admin', 'wh_supervisor', 'checker'),

@@ -10,7 +10,7 @@ function GenerateCheckModal({ soId, soNumber, open, onClose }: { soId: string; s
   const qc = useQueryClient();
   const [assignedTo, setAssignedTo] = useState('');
   const [err, setErr] = useState('');
-  const { data: employees } = useQuery({ queryKey: ['employees-checker'], queryFn: () => hrisApi.employees({ limit: '50' }) });
+  const { data: employees } = useQuery({ queryKey: ['employees-checker'], queryFn: () => hrisApi.employees({ role: 'checker', limit: '50' }) });
 
   const mut = useMutation({
     mutationFn: () => wmsApi.generateCheckTasks(soId, assignedTo || undefined),

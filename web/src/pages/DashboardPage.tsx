@@ -54,7 +54,7 @@ export function DashboardPage() {
             <KpiCard
               label="AP Outstanding"
               value={fmt(apSummary?.total_outstanding ?? 0)}
-              sub={`${apSummary?.unpaid_count ?? 0} unpaid to suppliers`}
+              sub={`${(apSummary?.unpaid_count ?? 0) + (apSummary?.partial_count ?? 0)} unpaid/partial invoices`}
               color="var(--warning)"
               icon={<TrendingDown size={18} />}
             />
@@ -113,12 +113,12 @@ export function DashboardPage() {
                 <span style={{ fontWeight: 700, fontSize: 13 }}>Recent Routes</span>
               </div>
               <div>
-                {(routeData?.data ?? []).length === 0 ? (
+                {(routeData ?? []).length === 0 ? (
                   <div style={{ padding: '20px 16px', color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }}>No routes yet</div>
-                ) : (routeData?.data ?? []).map((r) => (
+                ) : (routeData ?? []).map((r) => (
                   <div key={r.id} style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{r.route_date} · {r.plate_number}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{new Date(r.route_date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })} · {r.plate_number}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.driver_name}</div>
                     </div>
                     <Badge status={r.status} />

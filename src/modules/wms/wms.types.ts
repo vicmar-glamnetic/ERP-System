@@ -22,6 +22,7 @@ export interface ReceiveStockBody {
 export interface SOLineInput {
   product_id: string;
   qty_ordered: number;
+  unit_price?: number;
 }
 
 export interface CreateSOBody {

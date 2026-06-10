@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, Monitor, Smartphone, Clock } from 'lucide-react';
 import { hrisApi } from '../../api';
 import { Table, Badge, Btn, PageHeader, Modal, Field, Input, Select, Alert, Spinner } from '../../components/ui';
 import { apiError } from '../../api/client';
-import type { Employee } from '../../types';
+import type { Employee, LoginLog } from '../../types';
 
 const ROLES = ['system_admin', 'wh_supervisor', 'wh_operator', 'driver', 'dispatcher', 'checker', 'finance_officer', 'hr_manager', 'hr_staff', 'branch_manager'];
 
@@ -83,10 +83,46 @@ function CreateEmployeeModal({ open, onClose }: { open: boolean; onClose: () => 
   );
 }
 
+function LoginHistoryModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['login-logs', employee.id],
+    queryFn: () => hrisApi.loginLogs({ user_id: employee.id, limit: '50' }),
+    staleTime: 0,
+  });
+
+  const logCols = [
+    {
+      key: 'logged_in_at', label: 'Time',
+      render: (r: LoginLog) => new Date(r.logged_in_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    },
+    {
+      key: 'device_type', label: 'Device',
+      render: (r: LoginLog) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {r.device_type === 'mobile' ? <Smartphone size={13} /> : <Monitor size={13} />}
+          {r.device_type}
+        </span>
+      ),
+    },
+    { key: 'ip_address', label: 'IP', render: (r: LoginLog) => r.ip_address ?? '—' },
+  ];
+
+  return (
+    <Modal open onClose={onClose} title={`Login History — ${employee.full_name}`} width={560}>
+      {isLoading
+        ? <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><Spinner /></div>
+        : (data ?? []).length === 0
+          ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>No login history found.</p>
+          : <Table cols={logCols} rows={data ?? []} />}
+    </Modal>
+  );
+}
+
 export function EmployeesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [loginTarget, setLoginTarget] = useState<Employee | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['employees', roleFilter, search],
@@ -102,10 +138,20 @@ export function EmployeesPage() {
     { key: 'full_name', label: 'Name' },
     { key: 'role', label: 'Role', render: (r: Employee) => <Badge status={r.role} /> },
     { key: 'department', label: 'Dept', render: (r: Employee) => r.department || '—' },
-    { key: 'position', label: 'Position', render: (r: Employee) => r.position || '—' },
     { key: 'email', label: 'Email', render: (r: Employee) => r.email || '—' },
-    { key: 'hire_date', label: 'Hired', render: (r: Employee) => r.hire_date ? new Date(r.hire_date).toLocaleDateString('en-PH') : '—' },
     { key: 'status', label: 'Status', render: (r: Employee) => <Badge status={r.status} /> },
+    {
+      key: 'last_login', label: 'Last Login',
+      render: (r: Employee) => r.last_login
+        ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+            {r.last_device === 'mobile' ? <Smartphone size={12} /> : <Monitor size={12} />}
+            <Clock size={12} style={{ opacity: 0.5 }} />
+            {new Date(r.last_login).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )
+        : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Never</span>,
+    },
   ];
 
   return (
@@ -129,9 +175,10 @@ export function EmployeesPage() {
       <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
         {isLoading
           ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
-          : <Table cols={cols} rows={data?.data ?? []} />}
+          : <Table cols={cols} rows={data?.data ?? []} onRow={r => setLoginTarget(r)} />}
       </div>
       <CreateEmployeeModal open={showCreate} onClose={() => setShowCreate(false)} />
+      {loginTarget && <LoginHistoryModal employee={loginTarget} onClose={() => setLoginTarget(null)} />}
     </div>
   );
 }

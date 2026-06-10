@@ -19,8 +19,9 @@ router.get(
   authGuard, requireRole('system_admin', 'operations_manager', 'dispatcher'),
   Ctrl.listRoutes
 );
-// /today must be registered before /:id to avoid being captured as a param
+// /today and /mine must be registered before /:id to avoid being captured as a param
 router.get('/routes/today', authGuard, Ctrl.getMyRoute);
+router.get('/routes/mine', authGuard, requireRole('driver', 'system_admin'), Ctrl.listMyRoutes);
 router.get('/routes/:id', authGuard, Ctrl.getRoute);
 router.post(
   '/routes/start',
@@ -66,5 +67,6 @@ router.get(
   authGuard, requireRole('system_admin', 'operations_manager', 'dispatcher'),
   Ctrl.listFuelLogs
 );
+router.get('/fuel-logs/mine', authGuard, requireRole('driver', 'system_admin'), Ctrl.listMyFuelLogs);
 
 export default router;
