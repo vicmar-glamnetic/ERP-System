@@ -21,6 +21,8 @@ export function DeliverScreen() {
   const navRoute = useRoute<any>();
   const { stop, isLastStop } = navRoute.params as { stop: DeliveryStop; isLastStop: boolean };
   const [notes, setNotes] = useState('');
+  const [failureReason, setFailureReason] = useState('');
+  const [showFailForm, setShowFailForm] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -46,16 +48,24 @@ export function DeliverScreen() {
   };
 
   const handleConfirm = async (outcome: 'delivered' | 'failed') => {
-    if (outcome === 'failed' && !notes.trim()) {
-      Alert.alert('Required', 'Please enter a reason for failed delivery');
-      return;
-    }
     setSubmitting(true);
     try {
-      await confirmDelivery(stop.id, notes || undefined, photoUri || undefined);
-      if (isLastStop) {
+      await confirmDelivery(
+        stop.id,
+        notes || undefined,
+        photoUri || undefined,
+        outcome,
+        outcome === 'failed' ? failureReason : undefined
+      );
+      if (outcome === 'failed') {
         Alert.alert(
-          '🎉 Route Complete!',
+          'Stop Marked Failed',
+          'The dispatcher has been notified and will reschedule or cancel this delivery.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else if (isLastStop) {
+        Alert.alert(
+          'Route Complete!',
           'All stops have been delivered. Great work!',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
@@ -67,6 +77,15 @@ export function DeliverScreen() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleFailPress = () => {
+    if (!showFailForm) { setShowFailForm(true); return; }
+    if (!failureReason.trim()) {
+      Alert.alert('Required', 'Please enter a reason for the failed delivery');
+      return;
+    }
+    handleConfirm('failed');
   };
 
   return (
@@ -118,13 +137,44 @@ export function DeliverScreen() {
         )}
       </TouchableOpacity>
 
+      {showFailForm && (
+        <View style={styles.failFormCard}>
+          <Text style={styles.label}>Reason for failed delivery (required)</Text>
+          <TextInput
+            style={[styles.notesInput, { borderColor: COLORS.danger }]}
+            placeholder="e.g. Customer not home, wrong address..."
+            placeholderTextColor={COLORS.textMuted}
+            value={failureReason}
+            onChangeText={setFailureReason}
+            multiline
+            numberOfLines={3}
+            autoFocus
+          />
+        </View>
+      )}
+
       <TouchableOpacity
-        style={[styles.failBtn, submitting && styles.btnDisabled]}
-        onPress={() => handleConfirm('failed')}
-        disabled={submitting}
+        style={[
+          styles.failBtn,
+          (submitting || (showFailForm && !failureReason.trim())) && styles.btnDisabled,
+        ]}
+        onPress={handleFailPress}
+        disabled={submitting || (showFailForm && !failureReason.trim())}
       >
-        <Text style={styles.failBtnText}>✗ Mark as Failed</Text>
+        {submitting && showFailForm ? (
+          <ActivityIndicator color={COLORS.danger} />
+        ) : (
+          <Text style={styles.failBtnText}>
+            {showFailForm ? '✗ Confirm Failed Delivery' : '✗ Mark as Failed'}
+          </Text>
+        )}
       </TouchableOpacity>
+
+      {showFailForm && (
+        <TouchableOpacity style={styles.cancelFailBtn} onPress={() => { setShowFailForm(false); setFailureReason(''); }}>
+          <Text style={styles.cancelFailBtnText}>Cancel</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -198,4 +248,18 @@ const styles = StyleSheet.create({
   },
   failBtnText: { color: COLORS.danger, fontSize: 15, fontWeight: '700' },
   btnDisabled: { opacity: 0.6 },
+  failFormCard: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+  },
+  cancelFailBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  cancelFailBtnText: { color: COLORS.textMuted, fontSize: 14, fontWeight: '600' },
 });

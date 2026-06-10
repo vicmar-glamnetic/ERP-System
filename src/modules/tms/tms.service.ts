@@ -294,13 +294,19 @@ export async function confirmDelivery(
   userRole: string
 ): Promise<DeliveryStopRow> {
   const { stop_id, pod_photo_url, signature_url, notes } = body;
+  const outcome = body.status ?? 'delivered';
+  const failure_reason = body.failure_reason?.trim() ?? null;
+
+  if (outcome === 'failed' && !failure_reason) {
+    throw new ServiceError('MISSING_REASON', 'failure_reason is required when status is failed', 400);
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const { rows: [stop] } = await client.query(
-      `SELECT ds.id, ds.route_id, ds.status, r.driver_id, r.vehicle_id
+      `SELECT ds.id, ds.route_id, ds.status, ds.so_id, r.driver_id, r.vehicle_id
        FROM delivery_stops ds
        JOIN routes r ON r.id = ds.route_id
        WHERE ds.id = $1`,
@@ -311,23 +317,53 @@ export async function confirmDelivery(
     if (!ADMIN_ROLES.includes(userRole) && stop.driver_id !== userId) {
       throw new ServiceError('FORBIDDEN', 'Not your delivery stop', 403);
     }
-    if (stop.status === 'delivered') {
-      throw new ServiceError('ALREADY_DELIVERED', 'Stop already confirmed', 409);
+    if (['delivered', 'failed'].includes(stop.status as string)) {
+      throw new ServiceError('ALREADY_CONFIRMED', 'Stop already confirmed', 409);
     }
 
-    // Lock route to serialize the completion check
     await client.query(`SELECT id FROM routes WHERE id = $1 FOR UPDATE`, [stop.route_id]);
 
-    const { rows: [updated] } = await client.query(
-      `UPDATE delivery_stops
-       SET status = 'delivered', delivered_at = NOW(),
-           pod_photo_url = $2, signature_url = $3, notes = $4
-       WHERE id = $1 RETURNING *`,
-      [stop_id, pod_photo_url ?? null, signature_url ?? null, notes ?? null]
-    );
+    let updated: DeliveryStopRow;
 
+    if (outcome === 'failed') {
+      const { rows: [u] } = await client.query(
+        `UPDATE delivery_stops
+         SET status = 'failed', delivered_at = NOW(),
+             failure_reason = $2, notes = $3
+         WHERE id = $1 RETURNING *`,
+        [stop_id, failure_reason, notes ?? null]
+      );
+      updated = u as DeliveryStopRow;
+
+      // Insert failed delivery log
+      await client.query(
+        `INSERT INTO failed_delivery_logs (stop_id, route_id, so_id, driver_id, failure_reason)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [stop_id, stop.route_id, stop.so_id ?? null, userId, failure_reason]
+      );
+
+      // Mark SO as delivery_failed
+      if (stop.so_id) {
+        await client.query(
+          `UPDATE sales_orders SET status = 'delivery_failed', updated_at = NOW()
+           WHERE id = $1`,
+          [stop.so_id]
+        );
+      }
+    } else {
+      const { rows: [u] } = await client.query(
+        `UPDATE delivery_stops
+         SET status = 'delivered', delivered_at = NOW(),
+             pod_photo_url = $2, signature_url = $3, notes = $4
+         WHERE id = $1 RETURNING *`,
+        [stop_id, pod_photo_url ?? null, signature_url ?? null, notes ?? null]
+      );
+      updated = u as DeliveryStopRow;
+    }
+
+    // Complete route only when no stops remain pending
     const { rows: [{ pending_count }] } = await client.query(
-      `SELECT COUNT(*) FILTER (WHERE status != 'delivered') AS pending_count
+      `SELECT COUNT(*) FILTER (WHERE status = 'pending') AS pending_count
        FROM delivery_stops WHERE route_id = $1`,
       [stop.route_id]
     );
@@ -344,7 +380,162 @@ export async function confirmDelivery(
     }
 
     await client.query('COMMIT');
-    return updated as DeliveryStopRow;
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getFailedDeliveries(resolution?: string) {
+  const conditions = [`ds.status = 'failed'`];
+  const params: unknown[] = [];
+
+  if (resolution === 'pending') {
+    conditions.push(`ds.resolution IS NULL`);
+  } else if (resolution) {
+    params.push(resolution);
+    conditions.push(`ds.resolution = $${params.length}`);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT ds.id AS stop_id, ds.route_id, ds.so_id,
+            ds.address, ds.failure_reason, ds.resolution,
+            ds.rescheduled_to_stop_id, ds.delivered_at AS failed_at,
+            so.so_number, so.customer_name,
+            u.full_name AS driver_name,
+            r.route_date,
+            fdl.id AS log_id
+     FROM delivery_stops ds
+     JOIN routes r ON r.id = ds.route_id
+     JOIN users u ON u.id = r.driver_id
+     LEFT JOIN sales_orders so ON so.id = ds.so_id
+     LEFT JOIN failed_delivery_logs fdl ON fdl.stop_id = ds.id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY ds.delivered_at DESC`,
+    params
+  );
+  return rows;
+}
+
+export async function rescheduleFailedDelivery(
+  stop_id: string,
+  route_id: string,
+  stop_sequence: number,
+  resolvedBy: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: [stop] } = await client.query(
+      `SELECT * FROM delivery_stops WHERE id = $1 AND status = 'failed' FOR UPDATE`,
+      [stop_id]
+    );
+    if (!stop) throw new ServiceError('NOT_FOUND', 'Failed stop not found', 404);
+    if (stop.resolution) {
+      throw new ServiceError('ALREADY_RESOLVED', 'Stop already resolved', 409);
+    }
+
+    // Verify target route exists and is pending/planned
+    const { rows: [targetRoute] } = await client.query(
+      `SELECT id, status FROM routes WHERE id = $1`,
+      [route_id]
+    );
+    if (!targetRoute) throw new ServiceError('NOT_FOUND', 'Target route not found', 404);
+    if (!['pending', 'planned', 'active'].includes(targetRoute.status as string)) {
+      throw new ServiceError('INVALID_STATUS', 'Target route must be pending, planned, or active', 400);
+    }
+
+    // Insert new stop on target route
+    const { rows: [newStop] } = await client.query(
+      `INSERT INTO delivery_stops
+         (route_id, so_id, stop_sequence, address, recipient_name, recipient_phone)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [route_id, stop.so_id, stop_sequence, stop.address, stop.recipient_name, stop.recipient_phone]
+    );
+
+    // Update original failed stop
+    await client.query(
+      `UPDATE delivery_stops
+       SET resolution = 'rescheduled', rescheduled_to_stop_id = $2
+       WHERE id = $1`,
+      [stop_id, newStop.id]
+    );
+
+    // Update failed_delivery_logs
+    await client.query(
+      `UPDATE failed_delivery_logs
+       SET resolution = 'rescheduled', resolved_by = $2, resolved_at = NOW()
+       WHERE stop_id = $1`,
+      [stop_id, resolvedBy]
+    );
+
+    // SO back to dispatched
+    if (stop.so_id) {
+      await client.query(
+        `UPDATE sales_orders SET status = 'dispatched', updated_at = NOW() WHERE id = $1`,
+        [stop.so_id]
+      );
+    }
+
+    await client.query('COMMIT');
+    return newStop;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function cancelFailedDelivery(
+  stop_id: string,
+  reason: string,
+  resolvedBy: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: [stop] } = await client.query(
+      `SELECT * FROM delivery_stops WHERE id = $1 AND status = 'failed' FOR UPDATE`,
+      [stop_id]
+    );
+    if (!stop) throw new ServiceError('NOT_FOUND', 'Failed stop not found', 404);
+    if (stop.resolution) {
+      throw new ServiceError('ALREADY_RESOLVED', 'Stop already resolved', 409);
+    }
+
+    await client.query(
+      `UPDATE delivery_stops SET resolution = 'cancelled' WHERE id = $1`,
+      [stop_id]
+    );
+
+    await client.query(
+      `UPDATE failed_delivery_logs
+       SET resolution = 'cancelled', resolved_by = $2, resolved_at = NOW()
+       WHERE stop_id = $1`,
+      [stop_id, resolvedBy]
+    );
+
+    if (stop.so_id) {
+      await client.query(
+        `UPDATE sales_orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+        [stop.so_id]
+      );
+      await client.query(
+        `UPDATE sales_invoices SET status = 'voided'
+         WHERE so_id = $1 AND status != 'voided'`,
+        [stop.so_id]
+      );
+    }
+
+    await client.query('COMMIT');
+    return { stop_id, resolution: 'cancelled', reason, resolved_by: resolvedBy };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

@@ -21,6 +21,11 @@ router.get(
   authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor', 'wh_operator'),
   Ctrl.getPOById
 );
+router.get(
+  '/purchase-orders/:id/grn-logs',
+  authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor', 'wh_operator'),
+  Ctrl.getGRNLogsForPO
+);
 router.post(
   '/receive',
   authGuard, requireRole('system_admin', 'wh_supervisor', 'wh_operator'),
@@ -40,7 +45,7 @@ router.get(
 );
 router.get(
   '/sales-orders/:id',
-  authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor', 'dispatcher'),
+  authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor', 'dispatcher', 'checker'),
   Ctrl.getSOById
 );
 
@@ -65,6 +70,21 @@ router.post(
 );
 
 // ─── Putaway ──────────────────────────────────────────────────────────────────
+
+// New assignment-based flow
+router.post(
+  '/putaway/generate-tasks',
+  authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor'),
+  Ctrl.generatePutawayTasks
+);
+router.get('/putaway/tasks', authGuard, Ctrl.getPutawayTasks);
+router.post(
+  '/putaway/tasks/:id/confirm',
+  authGuard, requireRole('system_admin', 'wh_supervisor', 'wh_operator'),
+  Ctrl.confirmPutawayTaskById
+);
+
+// Legacy freeform flow (kept for mobile fallback)
 router.post(
   '/putaway/generate',
   authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor'),
@@ -91,7 +111,7 @@ router.post(
 );
 router.get(
   '/check-tasks',
-  authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor'),
+  authGuard, requireRole('system_admin', 'operations_manager', 'wh_supervisor', 'checker'),
   Ctrl.getCheckTasks
 );
 router.get('/check-tasks/mine', authGuard, Ctrl.getMyCheckTasks);

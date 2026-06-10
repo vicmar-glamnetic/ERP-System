@@ -28,18 +28,22 @@ export async function pingGPS(
 export async function confirmDelivery(
   stop_id: string,
   notes?: string,
-  photoUri?: string
+  photoUri?: string,
+  status: 'delivered' | 'failed' = 'delivered',
+  failure_reason?: string
 ): Promise<void> {
   let pod_photo_url: string | undefined;
 
-  if (photoUri) {
+  if (photoUri && status === 'delivered') {
     const base64 = await FileSystem.readAsStringAsync(photoUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
     pod_photo_url = `data:image/jpeg;base64,${base64}`;
   }
 
-  await apiClient.post('/tms/deliveries/confirm', { stop_id, notes, pod_photo_url });
+  await apiClient.post('/tms/deliveries/confirm', {
+    stop_id, notes, pod_photo_url, status, failure_reason,
+  });
 }
 
 export async function submitFuelLog(

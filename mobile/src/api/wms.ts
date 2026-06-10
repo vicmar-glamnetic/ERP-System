@@ -75,6 +75,23 @@ export interface PendingPutawayItem {
   received_at?: string;
 }
 
+export interface AssignedPutawayTask {
+  id: string;
+  grn_log_id: string;
+  product_id: string;
+  product_sku: string;
+  product_name: string;
+  qty: number;
+  warehouse_name: string | null;
+  lot_number: string | null;
+  from_aisle: string | null;
+  from_bay: string | null;
+  from_level: string | null;
+  assigned_to_name: string | null;
+  status: string;
+  created_at: string;
+}
+
 export async function getMyPutawayTasks(): Promise<PutawayTask[]> {
   const { data } = await apiClient.get('/wms/putaway/mine');
   return data.data as PutawayTask[];
@@ -90,6 +107,15 @@ export async function confirmPutaway(
 export async function getPendingPutaway(): Promise<PendingPutawayItem[]> {
   const { data } = await apiClient.get('/wms/putaway/pending');
   return data.data as PendingPutawayItem[];
+}
+
+export async function getAssignedPutawayTasks(): Promise<AssignedPutawayTask[]> {
+  const { data } = await apiClient.get('/wms/putaway/tasks');
+  return data.data as AssignedPutawayTask[];
+}
+
+export async function confirmPutawayTaskById(task_id: string, bin_id: string): Promise<void> {
+  await apiClient.post(`/wms/putaway/tasks/${task_id}/confirm`, { bin_id });
 }
 
 export async function confirmPutawayFreeForm(

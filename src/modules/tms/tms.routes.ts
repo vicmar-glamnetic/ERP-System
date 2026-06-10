@@ -53,6 +53,22 @@ router.post(
   Ctrl.confirmDelivery
 );
 
+router.get(
+  '/deliveries/failed',
+  authGuard, requireRole('system_admin', 'operations_manager', 'dispatcher'),
+  Ctrl.listFailedDeliveries
+);
+router.post(
+  '/deliveries/failed/:stop_id/reschedule',
+  authGuard, requireRole('system_admin', 'operations_manager', 'dispatcher'),
+  Ctrl.rescheduleFailedDelivery
+);
+router.post(
+  '/deliveries/failed/:stop_id/cancel',
+  authGuard, requireRole('system_admin', 'operations_manager', 'dispatcher'),
+  Ctrl.cancelFailedDelivery
+);
+
 // ─── Push Token ───────────────────────────────────────────────────────────────
 router.post('/push-token', authGuard, Ctrl.savePushToken);
 

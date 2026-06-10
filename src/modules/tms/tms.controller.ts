@@ -107,6 +107,38 @@ export async function confirmDelivery(req: Request, res: Response, next: NextFun
   } catch (err) { handleError(err, res, next); }
 }
 
+export async function listFailedDeliveries(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const resolution = req.query['resolution'] as string | undefined;
+    const result = await TmsService.getFailedDeliveries(resolution);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function rescheduleFailedDelivery(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const stop_id = req.params['stop_id'] as string;
+    const { route_id, stop_sequence } = req.body as { route_id: string; stop_sequence: number };
+    if (!route_id || !stop_sequence) {
+      sendError(res, 'INVALID_INPUT', 'route_id and stop_sequence are required', 400); return;
+    }
+    const result = await TmsService.rescheduleFailedDelivery(stop_id, route_id, stop_sequence, req.user!.userId);
+    sendSuccess(res, result, 201);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function cancelFailedDelivery(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const stop_id = req.params['stop_id'] as string;
+    const { reason } = req.body as { reason: string };
+    if (!reason?.trim()) {
+      sendError(res, 'INVALID_INPUT', 'reason is required', 400); return;
+    }
+    const result = await TmsService.cancelFailedDelivery(stop_id, reason, req.user!.userId);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
 // ─── Fuel ─────────────────────────────────────────────────────────────────────
 
 export async function createFuelLog(req: Request, res: Response, next: NextFunction): Promise<void> {

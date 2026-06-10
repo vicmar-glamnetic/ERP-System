@@ -27,6 +27,13 @@ function handleError(err: unknown, res: Response, next: NextFunction): void {
 
 // ─── Purchase Orders ──────────────────────────────────────────────────────────
 
+export async function getGRNLogsForPO(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await WmsService.getGRNLogsForPO(req.params['id'] as string);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
+
 export async function createPO(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await WmsService.createPO(req.body as CreatePOBody, req.user!.userId);
@@ -120,6 +127,39 @@ export async function dispatchSO(req: Request, res: Response, next: NextFunction
 }
 
 // ─── Putaway ──────────────────────────────────────────────────────────────────
+
+export async function generatePutawayTasks(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { grn_ids, assigned_to } = req.body as { grn_ids: string[]; assigned_to: string };
+    if (!Array.isArray(grn_ids) || grn_ids.length === 0) {
+      sendError(res, 'INVALID_INPUT', 'grn_ids must be a non-empty array', 400); return;
+    }
+    const result = await WmsService.generatePutawayTasks(grn_ids, assigned_to, req.user!.userId);
+    sendSuccess(res, result, 201);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function getPutawayTasks(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const role = req.user!.role;
+    const isOperator = role === 'wh_operator';
+    const tasks = await WmsService.getPutawayTasks({
+      employee_id: isOperator ? req.user!.userId : (req.query['employee_id'] as string | undefined),
+      status: req.query['status'] as string | undefined,
+      own_only: isOperator,
+    });
+    sendSuccess(res, tasks);
+  } catch (err) { handleError(err, res, next); }
+}
+
+export async function confirmPutawayTaskById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { bin_id } = req.body as { bin_id: string };
+    if (!bin_id) { sendError(res, 'INVALID_INPUT', 'bin_id is required', 400); return; }
+    const result = await WmsService.confirmPutawayTask(req.params['id'] as string, bin_id, req.user!.userId);
+    sendSuccess(res, result);
+  } catch (err) { handleError(err, res, next); }
+}
 
 export async function generatePutaway(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

@@ -11,7 +11,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import { confirmPutawayFreeForm, PendingPutawayItem, getWarehouses, getWarehouseBins } from '../../api/wms';
+import { confirmPutawayFreeForm, confirmPutawayTaskById, PendingPutawayItem, getWarehouses, getWarehouseBins } from '../../api/wms';
 import { BinLocation } from '../../types';
 import { COLORS } from '../../constants';
 
@@ -26,9 +26,11 @@ interface Props {
   item: PendingPutawayItem | null;
   onClose(): void;
   onSuccess(): void;
+  taskId?: string;
+  useNewEndpoint?: boolean;
 }
 
-export function AssignBinModal({ visible, item, onClose, onSuccess }: Props) {
+export function AssignBinModal({ visible, item, onClose, onSuccess, taskId, useNewEndpoint }: Props) {
   const [activeTab, setActiveTab] = useState<'manual' | 'search'>('manual');
   const [manualBinId, setManualBinId] = useState('');
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -92,7 +94,11 @@ export function AssignBinModal({ visible, item, onClose, onSuccess }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      await confirmPutawayFreeForm(item.grn_log_id, bin_id);
+      if (useNewEndpoint && taskId) {
+        await confirmPutawayTaskById(taskId, bin_id);
+      } else {
+        await confirmPutawayFreeForm(item.grn_log_id, bin_id);
+      }
       Alert.alert('Done', 'Item assigned to bin successfully.', [
         { text: 'OK', onPress: () => { onSuccess(); onClose(); } },
       ]);

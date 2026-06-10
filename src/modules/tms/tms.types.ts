@@ -26,6 +26,8 @@ export interface GPSPingBody {
 
 export interface ConfirmDeliveryBody {
   stop_id: string;
+  status?: 'delivered' | 'failed';
+  failure_reason?: string;
   pod_photo_url?: string;
   signature_url?: string;
   notes?: string;
@@ -74,9 +76,31 @@ export interface DeliveryStopRow {
   pod_photo_url: string | null;
   signature_url: string | null;
   notes: string | null;
+  failure_reason: string | null;
+  resolution: string | null;
+  rescheduled_to_stop_id: string | null;
   delivered_at: string | null;
   created_at: string;
   so_number?: string;
+}
+
+export interface FailedDeliveryLog {
+  id: string;
+  stop_id: string;
+  route_id: string;
+  so_id: string | null;
+  driver_id: string;
+  failure_reason: string;
+  resolution: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  // joined
+  so_number?: string;
+  customer_name?: string;
+  driver_name?: string;
+  route_date?: string;
+  address?: string;
 }
 
 export interface RouteWithStops extends RouteRow {

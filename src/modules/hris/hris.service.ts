@@ -227,19 +227,134 @@ export async function getShifts(filters: {
      FROM shifts s
      JOIN users u ON s.employee_id = u.id
      ${where}
-     ORDER BY s.shift_date DESC, s.clock_in`,
+     ORDER BY s.shift_date DESC, s.clock_in DESC NULLS LAST`,
     params
   );
 
   return rows;
 }
 
-export async function logAttendance(employeeId: string, eventType: string) {
+const LATE_GRACE_MINUTES = 15;
+
+export async function logAttendance(employeeId: string, eventType: 'clock_in' | 'clock_out') {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: [log] } = await client.query(
+      `INSERT INTO attendance_logs (employee_id, event_type) VALUES ($1, $2) RETURNING *`,
+      [employeeId, eventType]
+    );
+
+    // Update today's shift with clock_in / clock_out and compute status
+    const { rows: [shift] } = await client.query(
+      `SELECT * FROM shifts WHERE employee_id = $1 AND shift_date = CURRENT_DATE LIMIT 1`,
+      [employeeId]
+    );
+
+    let updatedStatus: string | null = null;
+
+    if (shift) {
+      if (eventType === 'clock_in' && !shift.clock_in) {
+        let status = 'present';
+        let lateMinutes: number | null = null;
+
+        if (shift.start_time) {
+          const { rows: [{ diff_minutes }] } = await client.query(
+            `SELECT EXTRACT(EPOCH FROM (NOW() - ($1::date + $2::time))) / 60 AS diff_minutes`,
+            [shift.shift_date, shift.start_time]
+          );
+          lateMinutes = Math.round(diff_minutes);
+          if (lateMinutes > LATE_GRACE_MINUTES) {
+            status = 'late';
+          }
+        }
+
+        await client.query(
+          `UPDATE shifts SET clock_in = NOW(), status = $2, late_minutes = $3 WHERE id = $1`,
+          [shift.id, status, lateMinutes]
+        );
+        updatedStatus = status;
+      } else if (eventType === 'clock_out' && !shift.clock_out) {
+        await client.query(
+          `UPDATE shifts SET clock_out = NOW() WHERE id = $1`,
+          [shift.id]
+        );
+        updatedStatus = shift.status;
+      }
+    }
+
+    await client.query('COMMIT');
+    return { ...log, shift_status: updatedStatus };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function markAbsentShifts() {
+  // Shifts today where start_time has passed (+ grace) and employee never clocked in
   const { rows } = await pool.query(
-    `INSERT INTO attendance_logs (employee_id, event_type) VALUES ($1, $2) RETURNING *`,
-    [employeeId, eventType]
+    `UPDATE shifts
+     SET status = 'absent'
+     WHERE shift_date = CURRENT_DATE
+       AND status = 'present'
+       AND clock_in IS NULL
+       AND start_time IS NOT NULL
+       AND (LOCALTIME - start_time) > INTERVAL '${LATE_GRACE_MINUTES} minutes'
+     RETURNING id, employee_id, shift_date, status`
   );
-  return rows[0];
+  return rows;
+}
+
+export async function getAttendance(filters: {
+  employee_id?: string;
+  date_from?: string;
+  date_to?: string;
+  status?: string;
+  requesterId: string;
+  requesterRole: string;
+}) {
+  const restricted = ['wh_operator', 'driver'];
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (restricted.includes(filters.requesterRole)) {
+    params.push(filters.requesterId);
+    conditions.push(`s.employee_id = $${params.length}`);
+  } else {
+    if (filters.employee_id) {
+      params.push(filters.employee_id);
+      conditions.push(`s.employee_id = $${params.length}`);
+    }
+  }
+
+  if (filters.date_from) {
+    params.push(filters.date_from);
+    conditions.push(`s.shift_date >= $${params.length}`);
+  }
+  if (filters.date_to) {
+    params.push(filters.date_to);
+    conditions.push(`s.shift_date <= $${params.length}`);
+  }
+  if (filters.status) {
+    params.push(filters.status);
+    conditions.push(`s.status = $${params.length}`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const { rows } = await pool.query(
+    `SELECT s.*, u.full_name, u.employee_code, u.role AS employee_role, u.department
+     FROM shifts s
+     JOIN users u ON s.employee_id = u.id
+     ${where}
+     ORDER BY s.shift_date DESC, s.clock_in DESC NULLS LAST`,
+    params
+  );
+  return rows;
 }
 
 export async function getLoginLogs(filters: { user_id?: string; limit: number }) {

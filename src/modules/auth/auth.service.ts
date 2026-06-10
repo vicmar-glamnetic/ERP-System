@@ -27,7 +27,7 @@ const PERMISSIONS: Record<string, string[]> = {
   driver: ['routes:own', 'gps:own', 'pod:own', 'shifts:own'],
   hr_manager: ['hris:full', 'payroll:full'],
   hr_staff: ['employees:write', 'shifts:write', 'payroll:read'],
-  checker: ['wms:own', 'checking:own', 'shifts:own'],
+  checker: ['wms:check', 'wms:so:read', 'inventory:read', 'shifts:own'],
 };
 
 export async function login(employeeCode: string, password: string, meta?: { ip?: string; device_type?: string }) {

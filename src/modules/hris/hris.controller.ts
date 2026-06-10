@@ -125,6 +125,31 @@ export async function logAttendance(req: Request, res: Response, next: NextFunct
   }
 }
 
+export async function getAttendance(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const rows = await HrisService.getAttendance({
+      employee_id: req.query['employee_id'] as string | undefined,
+      date_from: req.query['date_from'] as string | undefined,
+      date_to: req.query['date_to'] as string | undefined,
+      status: req.query['status'] as string | undefined,
+      requesterId: req.user!.userId,
+      requesterRole: req.user!.role,
+    });
+    sendSuccess(res, rows);
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}
+
+export async function markAbsent(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const updated = await HrisService.markAbsentShifts();
+    sendSuccess(res, { marked_absent: updated.length, records: updated });
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}
+
 export async function getLoginLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user_id = req.query['user_id'] as string | undefined;

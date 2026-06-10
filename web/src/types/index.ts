@@ -127,9 +127,26 @@ export interface LoginLog {
   full_name: string; role: string;
   logged_in_at: string; device_type: string; ip_address?: string;
 }
+
+export interface GRNLog {
+  id: string; po_line_id: string; product_id: string;
+  sku: string; product_name: string;
+  qty_received: number; lot_number?: string; bin_id: string;
+  received_at: string;
+}
+
+export interface PutawayTask {
+  id: string; grn_log_id: string; product_id: string;
+  product_sku: string; product_name: string;
+  qty: number; warehouse_name?: string; lot_number?: string;
+  from_aisle?: string; from_bay?: string; from_level?: string;
+  assigned_to?: string; assigned_to_name?: string; assigned_to_code?: string;
+  status: string; notes?: string; completed_at?: string; created_at: string;
+}
 export interface Shift {
   id: string; employee_id: string; employee_name?: string;
   employee_code?: string; full_name?: string;
   shift_date: string; shift_type: string; start_time: string;
   end_time?: string | null; status: string; notes?: string;
+  clock_in?: string | null; clock_out?: string | null; late_minutes?: number | null;
 }

@@ -41,6 +41,15 @@ router.get('/shifts', authGuard, HrisController.getShifts);
 
 router.post('/attendance', authGuard, HrisController.logAttendance);
 
+router.get('/attendance', authGuard, HrisController.getAttendance);
+
+router.post(
+  '/attendance/mark-absent',
+  authGuard,
+  requireRole('system_admin', 'hr_manager', 'hr_staff', 'operations_manager'),
+  HrisController.markAbsent
+);
+
 router.get(
   '/login-logs',
   authGuard,

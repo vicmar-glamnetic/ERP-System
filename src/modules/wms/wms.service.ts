@@ -223,6 +223,25 @@ export async function receiveStock(body: ReceiveStockBody, receivedBy: string) {
   }
 }
 
+export async function getGRNLogsForPO(po_id: string) {
+  const { rows } = await pool.query(
+    `SELECT gl.id, gl.po_line_id, gl.product_id,
+            p.sku, p.name AS product_name,
+            gl.qty_received::float, gl.lot_number, gl.bin_id,
+            gl.received_at,
+            EXISTS (
+              SELECT 1 FROM putaway_tasks pt
+              WHERE pt.grn_log_id = gl.id AND pt.status != 'completed'
+            ) AS has_active_putaway
+     FROM grn_logs gl
+     JOIN products p ON p.id = gl.product_id
+     WHERE gl.po_id = $1
+     ORDER BY gl.received_at`,
+    [po_id]
+  );
+  return rows;
+}
+
 // ─── Sales Orders ─────────────────────────────────────────────────────────────
 
 export async function createSO(body: CreateSOBody, createdBy: string) {
@@ -530,7 +549,7 @@ export async function dispatchSO(body: DispatchBody, dispatchedBy: string) {
 
       const { rows: soLines } = await client.query(
         `SELECT sol.product_id, sol.qty_ordered, sol.unit_price,
-                p.sku, p.name, p.uom, p.unit_price AS catalog_price
+                p.sku, p.name, p.uom
          FROM so_lines sol JOIN products p ON sol.product_id = p.id
          WHERE sol.so_id = $1`,
         [body.so_id]
@@ -538,7 +557,7 @@ export async function dispatchSO(body: DispatchBody, dispatchedBy: string) {
 
       let total = 0;
       for (const line of soLines) {
-        const unitPrice = toFloat(line.unit_price) > 0 ? toFloat(line.unit_price) : toFloat(line.catalog_price);
+        const unitPrice = toFloat(line.unit_price);
         const lineTotal = unitPrice * toFloat(line.qty_ordered);
         total += lineTotal;
         await client.query(
@@ -570,6 +589,180 @@ export async function dispatchSO(body: DispatchBody, dispatchedBy: string) {
 }
 
 // ─── Putaway ──────────────────────────────────────────────────────────────────
+
+export async function generatePutawayTasks(
+  grn_ids: string[],
+  assigned_to: string,
+  created_by: string
+) {
+  // Validate assignee role
+  const { rows: [emp] } = await pool.query(
+    `SELECT id, role FROM users WHERE id = $1 AND is_active = true`,
+    [assigned_to]
+  );
+  if (!emp) throw new ServiceError('NOT_FOUND', 'Assigned employee not found', 404);
+  if (emp.role !== 'wh_operator') {
+    throw new ServiceError('INVALID_ROLE', 'Assigned employee must be a wh_operator', 400);
+  }
+
+  const created = [];
+  for (const grn_log_id of grn_ids) {
+    // Validate GRN exists
+    const { rows: [grn] } = await pool.query(
+      `SELECT gl.id, gl.product_id, gl.qty_received, gl.lot_number, gl.bin_id,
+              pb.warehouse_id
+       FROM grn_logs gl
+       JOIN bin_locations pb ON pb.id = gl.bin_id
+       WHERE gl.id = $1`,
+      [grn_log_id]
+    );
+    if (!grn) throw new ServiceError('NOT_FOUND', `GRN log ${grn_log_id} not found`, 404);
+
+    // Check not already assigned
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM putaway_tasks WHERE grn_log_id = $1 AND status != 'completed'`,
+      [grn_log_id]
+    );
+    if (existing.length > 0) {
+      throw new ServiceError(
+        'ALREADY_ASSIGNED',
+        `GRN ${grn_log_id} already has an active putaway task`,
+        409
+      );
+    }
+
+    const { rows: [task] } = await pool.query(
+      `INSERT INTO putaway_tasks
+         (grn_log_id, product_id, qty, from_bin_id, warehouse_id,
+          lot_number, assigned_to, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+       RETURNING *`,
+      [
+        grn_log_id, grn.product_id, grn.qty_received,
+        grn.bin_id, grn.warehouse_id,
+        grn.lot_number ?? null, assigned_to, created_by,
+      ]
+    );
+    created.push(task);
+  }
+  return created;
+}
+
+export async function getPutawayTasks(filters: {
+  employee_id?: string;
+  status?: string;
+  own_only?: boolean;
+}) {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (filters.own_only && filters.employee_id) {
+    params.push(filters.employee_id);
+    conditions.push(`pt.assigned_to = $${params.length}`);
+  } else if (filters.employee_id) {
+    params.push(filters.employee_id);
+    conditions.push(`pt.assigned_to = $${params.length}`);
+  }
+
+  if (filters.status) {
+    params.push(filters.status);
+    conditions.push(`pt.status = $${params.length}`);
+  } else {
+    conditions.push(`pt.status != 'completed'`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const { rows } = await pool.query(
+    `SELECT pt.*,
+            p.sku AS product_sku, p.name AS product_name,
+            w.name AS warehouse_name,
+            u.full_name AS assigned_to_name,
+            u.employee_code AS assigned_to_code,
+            fb.aisle AS from_aisle, fb.bay AS from_bay, fb.level AS from_level
+     FROM putaway_tasks pt
+     JOIN products p       ON p.id  = pt.product_id
+     LEFT JOIN warehouses w  ON w.id  = pt.warehouse_id
+     LEFT JOIN users u       ON u.id  = pt.assigned_to
+     LEFT JOIN bin_locations fb ON fb.id = pt.from_bin_id
+     ${where}
+     ORDER BY pt.created_at`,
+    params
+  );
+  return rows;
+}
+
+export async function confirmPutawayTask(
+  task_id: string,
+  bin_id: string,
+  employee_id: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: [task] } = await client.query(
+      `SELECT * FROM putaway_tasks WHERE id = $1 FOR UPDATE`,
+      [task_id]
+    );
+    if (task && task.grn_log_id) {
+      const { rows: [grn] } = await client.query(
+        `SELECT lot_number FROM grn_logs WHERE id = $1`,
+        [task.grn_log_id]
+      );
+      task.grn_lot = grn?.lot_number ?? null;
+    }
+    if (!task) throw new ServiceError('NOT_FOUND', 'Putaway task not found', 404);
+    if (task.assigned_to !== employee_id) {
+      throw new ServiceError('FORBIDDEN', 'This task is not assigned to you', 403);
+    }
+    if (!['pending', 'in_progress'].includes(task.status)) {
+      throw new ServiceError('INVALID_STATUS', 'Task is already completed', 409);
+    }
+
+    const lot = task.lot_number ?? task.grn_lot ?? null;
+
+    // Deduct from staging bin
+    if (task.from_bin_id) {
+      await client.query(
+        `UPDATE inventory SET qty_on_hand = qty_on_hand - $1, updated_at = NOW()
+         WHERE product_id = $2 AND bin_id = $3 AND lot_number IS NOT DISTINCT FROM $4`,
+        [task.qty, task.product_id, task.from_bin_id, lot]
+      );
+    }
+
+    // Upsert to target bin
+    const { rows: existing } = await client.query(
+      `SELECT qty_on_hand FROM inventory
+       WHERE product_id = $1 AND bin_id = $2 AND lot_number IS NOT DISTINCT FROM $3 FOR UPDATE`,
+      [task.product_id, bin_id, lot]
+    );
+    const newQty = toFloat(existing[0]?.qty_on_hand) + toFloat(task.qty);
+
+    await client.query(
+      `INSERT INTO inventory (product_id, bin_id, qty_on_hand, lot_number, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT ON CONSTRAINT inventory_unique
+       DO UPDATE SET qty_on_hand = $3, updated_at = NOW()`,
+      [task.product_id, bin_id, newQty, lot]
+    );
+
+    const { rows: [updated] } = await client.query(
+      `UPDATE putaway_tasks
+       SET status = 'completed', to_bin_id = $1, completed_by = $2, completed_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [bin_id, employee_id, task_id]
+    );
+
+    await client.query('COMMIT');
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
 export async function generatePutaway(body: GeneratePutawayBody, _userId: string) {
   const { rows: [grn] } = await pool.query(
@@ -769,12 +962,21 @@ export async function generateCheckTasks(body: GenerateCheckTasksBody, _userId: 
       [body.so_id]
     );
 
+    // Auto-assign to a checker if none explicitly provided
+    let assignedTo = body.assigned_to ?? null;
+    if (!assignedTo) {
+      const { rows: checkers } = await client.query(
+        `SELECT id FROM users WHERE role = 'checker' AND status = 'active' LIMIT 1`
+      );
+      assignedTo = checkers[0]?.id ?? null;
+    }
+
     const tasks = [];
     for (const line of soLines) {
       const { rows: [task] } = await client.query(
         `INSERT INTO check_tasks (so_id, so_line_id, product_id, qty_expected, assigned_to)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [body.so_id, line.id, line.product_id, Math.round(toFloat(line.qty_ordered)), body.assigned_to ?? null]
+        [body.so_id, line.id, line.product_id, Math.round(toFloat(line.qty_ordered)), assignedTo]
       );
       tasks.push(task);
     }

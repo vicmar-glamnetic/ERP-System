@@ -3,6 +3,7 @@ import type {
   PurchaseOrder, POLine, SalesOrder, SalesInvoice, SILine,
   CheckTask, Product, Warehouse, BinLocation, InventoryRow,
   Vehicle, Route, LiveGPS, Branch, SupplierInvoice, Employee, Shift, LoginLog,
+  GRNLog, PutawayTask,
 } from '../types';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
@@ -76,6 +77,14 @@ export const wmsApi = {
 
   // Dispatch
   dispatch: (so_id: string) => api.post('/wms/dispatch', { so_id }).then((r) => r.data.data),
+
+  // Putaway task management
+  grnLogs: (po_id: string): Promise<GRNLog[]> =>
+    api.get(`/wms/purchase-orders/${po_id}/grn-logs`).then((r) => r.data.data ?? []),
+  putawayTasks: (params?: Record<string, string>): Promise<PutawayTask[]> =>
+    api.get('/wms/putaway/tasks', { params }).then((r) => r.data.data),
+  generatePutawayTasks: (grn_ids: string[], assigned_to: string) =>
+    api.post('/wms/putaway/generate-tasks', { grn_ids, assigned_to }).then((r) => r.data.data),
 };
 
 // ─── TMS ──────────────────────────────────────────────────────────────────────
@@ -89,6 +98,13 @@ export const tmsApi = {
   liveGPS: (): Promise<LiveGPS[]> => api.get('/tms/gps/live').then((r) => r.data.data),
   fuelLogs: (params?: Record<string, string>) =>
     api.get('/tms/fuel-logs', { params }).then((r) => r.data.data),
+
+  failedDeliveries: (params?: Record<string, string>) =>
+    api.get('/tms/deliveries/failed', { params }).then((r) => r.data.data),
+  rescheduleFailedDelivery: (stop_id: string, route_id: string, stop_sequence: number) =>
+    api.post(`/tms/deliveries/failed/${stop_id}/reschedule`, { route_id, stop_sequence }).then((r) => r.data.data),
+  cancelFailedDelivery: (stop_id: string, reason: string) =>
+    api.post(`/tms/deliveries/failed/${stop_id}/cancel`, { reason }).then((r) => r.data.data),
 };
 
 // ─── Finance ──────────────────────────────────────────────────────────────────
@@ -136,4 +152,8 @@ export const hrisApi = {
     api.post('/hris/shifts', body).then((r) => r.data.data),
   loginLogs: (params?: Record<string, string>): Promise<LoginLog[]> =>
     api.get('/hris/login-logs', { params }).then((r) => r.data.data),
+  attendance: (params?: Record<string, string>): Promise<Shift[]> =>
+    api.get('/hris/attendance', { params }).then((r) => r.data.data),
+  markAbsent: () =>
+    api.post('/hris/attendance/mark-absent').then((r) => r.data.data),
 };
