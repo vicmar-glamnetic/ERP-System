@@ -48,14 +48,27 @@ export function MyRouteScreen() {
     return () => { if (gpsInterval.current) clearInterval(gpsInterval.current); };
   }, [load]);
 
-  const beginGPS = useCallback((routeId: string) => {
+  const [lastPingAt, setLastPingAt] = useState<Date | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  const beginGPS = useCallback(async (routeId: string) => {
     if (gpsInterval.current) return;
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Location Permission Required',
+        'GPS tracking requires location access. Go to device Settings → Apps → ERP Mobile → Permissions → Location → Allow.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setGpsActive(true);
+    setGpsError(null);
 
     const sendPing = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         await pingGPS(
           routeId,
@@ -63,8 +76,12 @@ export function MyRouteScreen() {
           loc.coords.longitude,
           loc.coords.speed != null ? loc.coords.speed * 3.6 : undefined
         );
-      } catch (e) {
+        setLastPingAt(new Date());
+        setGpsError(null);
+      } catch (e: any) {
+        const msg = e?.message ?? 'Unknown error';
         console.error('GPS ping failed', e);
+        setGpsError(msg.includes('QUEUED_OFFLINE') ? 'Offline – ping queued' : `Ping failed: ${msg.slice(0, 60)}`);
       }
     };
 
@@ -158,8 +175,10 @@ export function MyRouteScreen() {
                 {pendingStops.length} of {route.stops?.length ?? 0} stops remaining
               </Text>
               {gpsActive && (
-                <View style={styles.gpsIndicator}>
-                  <Text style={styles.gpsText}>📡 GPS Active</Text>
+                <View style={[styles.gpsIndicator, gpsError ? styles.gpsIndicatorError : undefined]}>
+                  <Text style={[styles.gpsText, gpsError ? styles.gpsTextError : undefined]}>
+                    {gpsError ? `⚠️ GPS: ${gpsError}` : `📡 GPS Active${lastPingAt ? ` · ${lastPingAt.toLocaleTimeString()}` : ''}`}
+                  </Text>
                 </View>
               )}
               {route.status === 'pending' && (
@@ -249,6 +268,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   gpsText: { color: COLORS.success, fontSize: 12, fontWeight: '600' },
+  gpsIndicatorError: { backgroundColor: '#FFEBEE' },
+  gpsTextError: { color: COLORS.danger },
   startBtn: {
     backgroundColor: COLORS.secondary,
     borderRadius: 8,
