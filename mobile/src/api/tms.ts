@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import { Route, CompletedRoute, FuelLogEntry } from '../types';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export async function getMyRouteToday(): Promise<Route | null> {
   try {
@@ -35,7 +36,12 @@ export async function confirmDelivery(
   let pod_photo_url: string | undefined;
 
   if (photoUri && status === 'delivered') {
-    const base64 = await FileSystem.readAsStringAsync(photoUri, {
+    const compressed = await ImageManipulator.manipulateAsync(
+      photoUri,
+      [{ resize: { width: 1024 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
       encoding: FileSystem.EncodingType.Base64,
     });
     pod_photo_url = `data:image/jpeg;base64,${base64}`;

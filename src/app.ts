@@ -11,7 +11,7 @@ import { errorHandler } from './middleware/errorHandler';
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use('/auth', authRouter);
 app.use('/hris', hrisRouter);
 app.use('/inventory', inventoryRouter);
