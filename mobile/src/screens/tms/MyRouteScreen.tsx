@@ -77,17 +77,36 @@ export function MyRouteScreen() {
     setGpsActive(true);
     setGpsError(null);
 
-    const getLocation = (): Promise<Location.LocationObject> =>
+    const tryWatchOnce = (accuracy: Location.Accuracy, timeoutMs: number): Promise<Location.LocationObject> =>
       new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('GPS timeout after 20s')), 20000);
+        let sub: Location.LocationSubscription | null = null;
+        const timer = setTimeout(() => {
+          sub?.remove();
+          reject(new Error(`timeout_${timeoutMs}`));
+        }, timeoutMs);
         Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, timeInterval: 500, distanceInterval: 0 },
-          (loc) => { clearTimeout(timer); resolve(loc); }
-        ).then(sub => {
-          // Remove subscription after first fix is resolved
-          Promise.resolve().then(() => sub.remove());
-        }).catch(reject);
+          { accuracy, timeInterval: 1000, distanceInterval: 0 },
+          (loc) => {
+            clearTimeout(timer);
+            sub?.remove();
+            resolve(loc);
+          }
+        ).then(s => { sub = s; }).catch(e => { clearTimeout(timer); reject(e); });
       });
+
+    const getLocation = async (): Promise<Location.LocationObject> => {
+      // 1. Use cached position (instant, no hardware needed)
+      const cached = await Location.getLastKnownPositionAsync({ maxAge: 120000 });
+      if (cached) return cached;
+
+      // 2. Network-only (cell + WiFi, works without GPS hardware)
+      try { return await tryWatchOnce(Location.Accuracy.Lowest, 10000); } catch {}
+
+      // 3. Balanced (network + GPS)
+      try { return await tryWatchOnce(Location.Accuracy.Balanced, 15000); } catch {}
+
+      throw new Error('No location available — try moving near a window or enabling Wi-Fi');
+    };
 
     const sendPing = async () => {
       try {
